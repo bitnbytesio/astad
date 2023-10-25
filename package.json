@@ -1,0 +1,86 @@
+{
+  "name": "astad",
+  "version": "0.2.1",
+  "description": "astad is a nodejs framework for api and web development",
+  "main": "./cjs/index.js",
+  "module": "./esm/index.js",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./esm/index.js",
+      "require": "./cjs/index.js",
+      "types": "./types/index.d.ts"
+    },
+    "./conf": {
+      "import": "./esm/conf/index.js",
+      "require": "./cjs/conf/index.js",
+      "types": "./types/conf/index.d.ts"
+    },
+    "./container": {
+      "import": "./esm/container/index.js",
+      "require": "./cjs/container/index.js",
+      "types": "./types/container/index.d.ts"
+    },
+    "./dam": {
+      "import": "./esm/dam/index.js",
+      "require": "./cjs/dam/index.js",
+      "types": "./types/dam/index.d.ts"
+    },
+    "./event": {
+      "import": "./esm/event/index.js",
+      "require": "./cjs/event/index.js",
+      "types": "./types/event/index.d.ts"
+    },
+    "./http": {
+      "import": "./esm/http/index.js",
+      "require": "./cjs/http/index.js",
+      "types": "./types/http/index.d.ts"
+    },
+    "./support": {
+      "import": "./esm/support/index.js",
+      "require": "./cjs/support/index.js",
+      "types": "./types/support/index.d.ts"
+    },
+    "./testing": {
+      "import": "./esm/testing/index.js",
+      "require": "./cjs/testing/index.js",
+      "types": "./types/testing/index.d.ts"
+    },
+    "./esm": "./esm/**/*.js",
+    "./cjs": "./cjs/**/*.js"
+  },
+  "types": "./types/index.d.ts",
+  "engines": {
+    "node": ">=16.4"
+  },
+  "scripts": {
+    "compile": "npx tsc -p tsconfig.json && npx tsc -p cjs.tsconfig.json && node fixup.js",
+    "test": "NODE_OPTIONS=\"--loader ts-node/esm --experimental-specifier-resolution=node\" tap ./src/http/router/*.spec.ts -- --ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bitnbytesio/astad.git"
+  },
+  "keywords": [
+    "nodejs",
+    "framework",
+    "koa",
+    "api",
+    "web"
+  ],
+  "author": "Harcharan Singh <bitnbytesio@gmail.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/bitnbytesio/astad/issues"
+  },
+  "homepage": "https://github.com/bitnbytesio/astad#readme",
+  "devDependencies": {
+    "@types/node": "^20.8.3",
+    "tap": "^18.5.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0"
+  }
+}

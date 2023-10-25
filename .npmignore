@@ -1,0 +1,8 @@
+*
+!bin/**
+!cjs/**
+!esm/**
+!types/**
+!package.json
+!package-lock.json
+!readme.md
