@@ -1,7 +1,7 @@
 import { Server } from 'node:http';
 import * as internal from 'node:stream';
 
-import { HttpRequestHeaders, HttpRequestQuery, IHttpContext } from './context.js';
+import { HttpRequestHeaders, HttpRequestQuery, IHttpContext, IHttpCookies } from './context.js';
 import { IViewEngine } from './view.js';
 import { HTTP_KEY_VIEW_PROVIDER } from './consts.js';
 import { HttpResponse } from './response.js';
@@ -37,6 +37,7 @@ export class HttpKoa {
 export class HttpKoaContext implements IHttpContext {
   query: HttpRequestQuery;
   headers: HttpRequestHeaders;
+  cookies: IHttpCookies;
   params = {};
   willRender = false;
   state: Record<any, any> = {};
@@ -50,6 +51,7 @@ export class HttpKoaContext implements IHttpContext {
       (k: string, v: string | string[]) => {
         ctx.set(k, v);
       });
+    this.cookies = ctx.cookies as any;
   }
 
   get host() {
@@ -150,13 +152,17 @@ export class HttpKoaContext implements IHttpContext {
     this.ctx.body = stream;
   }
 
+  redirect(url: string, alt?: string) {
+    this.ctx.redirect(url, alt)
+  }
+
   async view(template: string, data = {}, status = 200) {
     const view = this.value<IViewEngine>(HTTP_KEY_VIEW_PROVIDER);
     if (!view) {
       throw new Error('view engine is not set.');
     }
     this.ctx.status = status;
-    this.ctx.body = await view.render(template, data);
+    this.ctx.body = await view.render(this, template, data);
     this.willRender = true;
   }
 

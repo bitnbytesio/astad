@@ -1,9 +1,30 @@
 import * as internal from 'node:stream';
 import { HttpResponse } from './response.js';
 
+export interface IHttpCookieOpts {
+  // maxAge: a number representing the milliseconds from Date.now() for expiry.
+  maxAge?: number
+  // expires: a Date object indicating the cookie's expiration date (expires at the end of session by default).
+
+  expires?: Date,
+  path?: string
+  domain?: string
+  secure?: boolean
+  httpOnly?: boolean
+  sameSite?: 'strict' | 'lax' | 'none' | boolean
+  signed?: boolean
+  overwrite?: boolean
+}
+
+export interface IHttpCookies {
+  get(name: string): string | undefined
+  set(name: string, value: string, options?: IHttpCookieOpts): any
+}
+
 export interface IHttpContext {
   query: HttpRequestQuery
   headers: HttpRequestHeaders
+  cookies: IHttpCookies
   params: Record<string, string>
   body: any
   files: any
@@ -28,6 +49,7 @@ export interface IHttpContext {
   reply(response: HttpResponse): void
   view(template: any, data?: any, status?: number): Promise<any>
   stream(stream: internal.Readable, mime?: string): void
+  redirect(url: string, alt?: string): void
   // shouldRender(): boolean
   // getView(): { template: string, data: any }
   set<T = any>(key: any, value: T): T
@@ -101,5 +123,30 @@ export class HttpRequestQuery {
       }
     }
     return qs.join('&');
+  }
+}
+
+export class HttpCookies {
+  cookies: Record<string, any> = {};
+  constructor(readonly raw: string) {
+    const carray = raw.split(';');
+    for (const citem of carray) {
+      let [name, value, ...rest] = citem.split('=');
+      name = name?.trim();
+      if (name) {
+
+      }
+      // const value = rest.join(`=`).trim();
+      this.cookies[name] = { value, rest };
+
+    }
+  }
+
+  get(name: string) {
+    return this.cookies[name]?.value;
+  }
+
+  set(name: string, value: string, opts: IHttpCookieOpts) {
+    this.cookies[name] = { value, ...opts };
   }
 }

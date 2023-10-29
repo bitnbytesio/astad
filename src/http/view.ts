@@ -1,3 +1,5 @@
+import { IHttpContext } from "./context.js";
+
 export interface IViewEngine {
-  render(template: string, data: any): Promise<any>
+  render(ctx: IHttpContext, template: string, data: any): Promise<any>
 }

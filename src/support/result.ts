@@ -3,15 +3,15 @@ type ResultErrorInput = IResultErrorAttributes | ResultError | Error;
 export class Result<V = any, E = ResultErrorInput> {
   constructor(readonly value: V | E, readonly ok: boolean) { }
 
-  error<T=ResultError>() {
+  error<T = ResultError>() {
     return this.value as T;
   }
 
-  static ok<V>(value: V) {
-    return new Result(value, true);
+  static ok<V = any>(value: V) {
+    return new Result<V>(value, true);
   }
-  static error(error: ResultErrorInput) {
-    return new Result(ResultError.from(error), false);
+  static error<V = any>(error: ResultErrorInput) {
+    return new Result<V>(ResultError.from(error), false);
   }
 
   // with() {

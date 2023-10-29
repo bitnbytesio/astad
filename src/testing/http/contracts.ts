@@ -24,4 +24,5 @@ export interface ITestHttpResponse<T = any> {
   headers: Record<string, string | string[]>,
   status: number,
   body: T,
+  redirect?: { url: string, alt?: string }
 }

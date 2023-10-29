@@ -226,3 +226,6 @@ t.test('service', async t => {
 - data mapper
 - templating
 - testing
+
+## Bugs
+- handle duplicate middlewares in router, should only have unique middlewares

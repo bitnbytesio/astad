@@ -1,6 +1,6 @@
 import * as internal from 'node:stream';
 
-import { HttpRequestHeaders, HttpRequestQuery, IHttpContext } from '../../http/context.js';
+import { HttpCookies, HttpRequestHeaders, HttpRequestQuery, IHttpContext, IHttpCookies } from '../../http/context.js';
 import { HttpResponse } from '../../http/response.js';
 import { IViewEngine } from '../../http/view.js';
 import { HTTP_KEY_VIEW_PROVIDER } from '../../http/consts.js';
@@ -11,6 +11,7 @@ import { TestHttpError } from './error.js';
 export class TestHttpContext implements IHttpContext {
   query: HttpRequestQuery;
   headers: HttpRequestHeaders;
+  cookies: IHttpCookies
   params = {};
   willRender = false;
   state: Record<any, any> = {};
@@ -18,6 +19,7 @@ export class TestHttpContext implements IHttpContext {
     headers: {},
     status: 404,
     body: undefined,
+    redirect: undefined,
   }
 
   protected _reply: HttpResponse | null = null;
@@ -37,6 +39,7 @@ export class TestHttpContext implements IHttpContext {
       (k: string, v: string | string[]) => {
         this.setHeader(k, v);
       });
+    this.cookies = new HttpCookies("");
   }
 
   modify(ctx: ITestHttpContext) {
@@ -169,13 +172,17 @@ export class TestHttpContext implements IHttpContext {
     this.response.body = stream;
   }
 
+  redirect(url: string, alt?: string | undefined): void {
+    this.response.redirect = { url, alt };
+  }
+
   async view(template: string, data = {}, status = 200) {
     const view = this.value<IViewEngine>(HTTP_KEY_VIEW_PROVIDER);
     if (!view) {
       throw new Error('view engine is not set.');
     }
     this.response.status = status;
-    this.response.body = await view.render(template, data);
+    this.response.body = await view.render(this, template, data);
     this.willRender = true;
   }
 
