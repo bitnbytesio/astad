@@ -18,6 +18,8 @@ export interface IFileinfo {
 export interface IHttpAssetOpts {
   root: string
   files: Array<string | { path: string, mime: string }>
+  cache: boolean
+  debug: boolean
 }
 
 export class HttpAsset {
@@ -71,14 +73,19 @@ export class HttpAsset {
   async file(ctx: IHttpContext, file: IHttpAssetFile, head = false) {
     const absfile = path.join(this.opts.root, file.path);
     const info = await this.info(absfile);
-    const etag = ctx.headers.get('if-none-match');
-    if (etag && etag === info.checksome) {
-      ctx.abort(304);
-      return;
+    if (!this.opts.debug) {
+      ctx.headers.set('Content-Length', info.size.toString());
     }
-    ctx.headers.set('Content-Length', info.size.toString());
     ctx.headers.set('ETag', info.checksome);
-    ctx.headers.set('Cache-Control', `public, max-age=${this.maxAgeSeconds}`);
+    if (this.opts.cache && !this.opts.debug) {
+      const etag = ctx.headers.get('if-none-match');
+      if (etag && etag === info.checksome) {
+        ctx.abort(304);
+        return;
+      }
+
+      ctx.headers.set('Cache-Control', `public, max-age=${this.maxAgeSeconds}`);
+    }
     if (!head) {
       ctx.stream(createReadStream(absfile), file.mime || info.mime);
     }
