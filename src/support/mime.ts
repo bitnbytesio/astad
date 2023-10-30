@@ -6,6 +6,15 @@ export function GuessMime(source: string) {
   let type = '';
 
   switch (ext) {
+    case '.css':
+      type = 'text/css';
+      break;
+    case '.js':
+      type = 'text/javascript';
+      break;
+    case '.html':
+      type = 'text/html';
+      break;
     case '.jpg':
     case '.jpeg':
       type = 'image/jpeg';
