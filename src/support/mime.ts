@@ -12,6 +12,9 @@ export function GuessMime(source: string) {
     case '.js':
       type = 'text/javascript';
       break;
+    case '.json':
+      type = 'application/json';
+      break;
     case '.html':
       type = 'text/html';
       break;
