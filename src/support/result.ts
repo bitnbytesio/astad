@@ -10,7 +10,7 @@ export class Result<V = any, E = ResultErrorInput> {
   static ok<V = any>(value: V) {
     return new Result<V>(value, true);
   }
-  static error<V = any>(error: ResultErrorInput) {
+  static error<V = ResultError>(error: ResultErrorInput) {
     return new Result<V>(ResultError.from(error), false);
   }
 
@@ -36,8 +36,19 @@ export class ResultError extends Error {
     super(message);
   }
 
-  metadata() {
-    return this._data;
+  get status() {
+    return this.code;
+  }
+
+  get data() {
+    return this._data || {};
+  }
+
+  metadata(data?: any) {
+    if (data) {
+      this._data = data;
+    }
+    return this._data || {};
   }
 
   static from(error: ResultErrorInput, data?: IResultErrorData): ResultError {
@@ -57,10 +68,38 @@ export class ResultError extends Error {
     return new ResultError(error.message, error.code, error.data);
   }
 
+  static try(error: ResultErrorInput, data?: IResultErrorData): ResultError {
+    if (error instanceof ResultError) {
+      return error;
+    }
+    if (error instanceof Error) {
+      let code = 500;
+      if (data && typeof data['code'] != "undefined") {
+        code = data['code'];
+      } else if ((error as any).code) {
+        code = (error as any).code;
+      }
+
+      return new ResultError(error.message, code || 500, data);
+    }
+    return new ResultError(error.message, error.code, error.data);
+  }
+
+  toHttpResponse() {
+    return {
+      status: this.status,
+      body: {
+        message: this.expose ? this.message : 'Internal server error.',
+        ...(this.data || {}),
+      }
+    };
+  }
+
   toJSON() {
     return {
       message: this.expose ? this.message : 'Internal server error.',
       code: this.code,
+      ...(this.data || {}),
     };
   }
 }

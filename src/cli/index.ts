@@ -93,6 +93,10 @@ export class CliContext {
       });
     });
   }
+
+  throw(error: Error) {
+    throw error;
+  }
 }
 
 export interface ICliParsedFlag {
@@ -350,7 +354,7 @@ export interface ICommandFlag<T = any> extends ICommandArg<T> {
 export interface ICommandArg<T = any> {
   name: string
   default: T
-  value: T
+  value?: T
   type: Boolean | Number | String
 }
 

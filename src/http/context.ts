@@ -1,5 +1,5 @@
 import * as internal from 'node:stream';
-import { HttpResponse } from './response.js';
+import { IHttpError, IHttpResponse } from './response.js';
 
 export interface IHttpCookieOpts {
   // maxAge: a number representing the milliseconds from Date.now() for expiry.
@@ -46,7 +46,8 @@ export interface IHttpContext {
   created(): void
   throw(status: number, message: string): never
   abort(status: number, message?: string): void
-  reply(response: HttpResponse): void
+  abort(error:IHttpError): void
+  reply(response: IHttpResponse): void
   view(template: any, data?: any, status?: number): Promise<any>
   stream(stream: internal.Readable, mime?: string): void
   redirect(url: string, alt?: string): void

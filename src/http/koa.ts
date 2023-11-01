@@ -4,7 +4,7 @@ import * as internal from 'node:stream';
 import { HttpRequestHeaders, HttpRequestQuery, IHttpContext, IHttpCookies } from './context.js';
 import { IViewEngine } from './view.js';
 import { HTTP_KEY_VIEW_PROVIDER } from './consts.js';
-import { HttpResponse } from './response.js';
+import { IHttpError, IHttpResponse } from './response.js';
 
 export type HttpKoaMiddlewareCallback = (ctx: any, next: any) => Promise<any> | any
 
@@ -42,7 +42,7 @@ export class HttpKoaContext implements IHttpContext {
   willRender = false;
   state: Record<any, any> = {};
 
-  protected _reply: HttpResponse | null = null;
+  protected _reply: IHttpResponse | null = null;
 
   constructor(protected ctx: any) {
     this.query = new HttpRequestQuery(ctx.query);
@@ -133,17 +133,37 @@ export class HttpKoaContext implements IHttpContext {
     return this.ctx.throw(status, message) as never;
   }
 
-  abort(status: number, message?: string): void {
-    this.ctx.status = status;
-    this.ctx.body = { message: message || 'Something went wrong.' };
+  abort(error: IHttpError): void;
+  abort(status: number, message?: string): void;
+  abort(...args: any): void {
+    if (args.length == 1) {
+      if (typeof args[0] == 'number') {
+        this.ctx.status = args[0];
+        this.ctx.body = { message: 'Something went wrong.' };
+        return;
+      }
+
+      const err = args[0] as IHttpError
+      this.ctx.status = err.status;
+      this.ctx.body = { message: err.message, ...(err.data || {}) };
+      return
+    }
+    this.ctx.status = args[0];
+    this.ctx.body = { message: args[1] || 'Something went wrong.', ...(args[2] || {}) };
   }
 
   /**
    * ununsed
    * @param response 
    */
-  reply(response: HttpResponse) {
-    this._reply = response;
+  reply(response: IHttpResponse) {
+    if (response.headers) {
+      for (const key in response.headers) {
+        this.ctx.set(key, response.headers[key]);
+      }
+    }
+    this.ctx.status = response.status;
+    this.ctx.body = response.body;
   }
 
   stream(stream: internal.Readable, mime: string = 'application/octet-stream') {

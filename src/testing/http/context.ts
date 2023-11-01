@@ -1,7 +1,7 @@
 import * as internal from 'node:stream';
 
 import { HttpCookies, HttpRequestHeaders, HttpRequestQuery, IHttpContext, IHttpCookies } from '../../http/context.js';
-import { HttpResponse } from '../../http/response.js';
+import { IHttpError, IHttpResponse } from '../../http/response.js';
 import { IViewEngine } from '../../http/view.js';
 import { HTTP_KEY_VIEW_PROVIDER } from '../../http/consts.js';
 import { IHttpFile, ITestHttpContext, ITestHttpResponse } from './contracts.js';
@@ -22,7 +22,7 @@ export class TestHttpContext implements IHttpContext {
     redirect: undefined,
   }
 
-  protected _reply: HttpResponse | null = null;
+  protected _reply: IHttpResponse | null = null;
 
   parseHeaders(headers: any) {
     const lowerd: any = {}
@@ -153,16 +153,29 @@ export class TestHttpContext implements IHttpContext {
     throw new TestHttpError(status, message);
   }
 
-  abort(status: number, message?: string): void {
-    this.response.status = status;
-    this.response.body = { message: message || 'Something went wrong.' };
+
+  abort(...args: any): void {
+    if (args.length == 1) {
+      if (typeof args[0] == 'number') {
+        this.response.status = args[0];
+        this.response.body = { message: 'Something went wrong.' };
+        return;
+      }
+
+      const err = args[0] as IHttpError
+      this.response.status = err.status;
+      this.response.body = { message: err.message };
+      return
+    }
+    this.response.status = args[0];
+    this.response.body = { message: args[1] || 'Something went wrong.', data: args[2] };
   }
 
   /**
    * ununsed
    * @param response 
    */
-  reply(response: HttpResponse) {
+  reply(response: IHttpResponse) {
     this._reply = response;
   }
 

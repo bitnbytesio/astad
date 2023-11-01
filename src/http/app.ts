@@ -5,6 +5,7 @@ import { composeAsync } from '../support/compose.js';
 import { HttpRouter } from './index.js';
 import { IViewEngine } from './view.js';
 import { HTTP_KEY_REQ_ID, HTTP_KEY_VIEW_PROVIDER } from './consts.js';
+import { ResultError } from '../support/result.js';
 
 export class HttpApp {
   protected asyncLocalStorage?: AsyncLocalStorage<any>;
@@ -92,13 +93,21 @@ export class HttpApp {
         // if (ctx.accepts('json')) {
 
         // }
-        const status = err.statusCode || err.status || err.code || 500;
-        const message = status < 500 || err.expose ? err.message : 'Internal server error.';
-        const data: any = { message };
-        if (status == 422 && err.errors) {
-          data.errors = err.errors;
+        err.status = err.statusCode || err.status || err.code || 500;
+        const message = err.status < 500 || err.expose ? err.message : 'Internal server error.';
+        const resultError = ResultError.try(err);
+        if (ctx.accepts('html')) {
+          if (this.viewProvider) {
+            this.viewProvider.renderError(ctx, resultError)
+          }
+        } else {
+          
+          const data: any = { message };
+          if (err.status == 422 && err.errors) {
+            data.errors = err.errors;
+          }
+          ctx.json(data, err.status);
         }
-        ctx.json(data, status);
         // if (ctx.accepts('json')) {
         //   ctx.json(data, status);
         // } else {
