@@ -142,7 +142,7 @@ export class HttpRouter<Signature = RouteHandlerCallback> {
         // prefix route path
         let routePath = nroute.getPath();
         routePath = prefix + routePath;
-        if (routePath.endsWith('/')) {
+        if (routePath != '/' && routePath.endsWith('/')) {
           // remove trailing slash
           routePath = routePath.slice(0, routePath.length - 1)
         }
@@ -198,7 +198,6 @@ export class HttpRouter<Signature = RouteHandlerCallback> {
       const [what] = args;
       // append routes
       if (what instanceof HttpRouter) {
-        console.log(`merge single in(${this._prefix})`, what._prefix,)
         this.mergeRouters([what]);
         return;
       }
@@ -231,7 +230,7 @@ export class HttpRouter<Signature = RouteHandlerCallback> {
   }
 
   find(method: HTTP_METHOD, path: string, params: NodeJS.Dict<string> = {}) {
-    if (path.endsWith('/')) {
+    if (path != '/' && path.endsWith('/')) {
       // ignore trailing slash(/)
       path = path.slice(0, path.length - 1);
     }

@@ -2,12 +2,13 @@ import { composeAsync } from '../../support/compose.js';
 import { HTTP_METHOD, RouteMiddlewareCallback } from './contracts.js';
 
 export class HttpRoute<T = any> {
-  private _static: boolean = true;
-  private regex: RegExp | null = null;
-  private paramKeys: Array<string> = [];
-
-  private _name: string = '';
+  protected _static: boolean = true;
+  protected regex: RegExp | null = null;
+  protected paramKeys: Array<string> = [];
+  protected _name: string = '';
   protected path: string = '';
+  protected middlewares: RouteMiddlewareCallback[] = [];
+  protected composedHandler: any = null;
 
   constructor(
     readonly methods: HTTP_METHOD[] | '*',
@@ -123,7 +124,15 @@ export class HttpRoute<T = any> {
   }
 
   clone() {
-    return new HttpRoute(Array.isArray(this.methods) ? [...this.methods] : '*', this.path, this.handler, { ...this.metadata });
+    const route = new HttpRoute(
+      Array.isArray(this.methods) ? [...this.methods] : '*',
+      this.path,
+      this.handler,
+      { ...this.metadata },
+    );
+    route.middleware(...this.middlewares);
+    route.as(this._name);
+    return route;
   }
 
   /**
@@ -148,11 +157,22 @@ export class HttpRoute<T = any> {
   }
 
   middleware(...middlewares: RouteMiddlewareCallback[]) {
-    this.handler = (Array.isArray(this.handler) ? [...middlewares, ...this.handler] : [...middlewares, this.handler]) as any;
+    for (const cb of middlewares) {
+      // if (!this.middlewares.includes(cb)) {
+      this.middlewares.push(cb);
+      // }
+    }
     return this;
   }
 
-  getComposedHandler<T>() {
-    return composeAsync<T>((Array.isArray(this.handler) ? this.handler : [this.handler]) as any);
+  getComposedHandler<T = RouteMiddlewareCallback>() {
+    if (this.composedHandler) {
+      return this.composedHandler as T;
+    }
+    this.composedHandler = composeAsync<T>([
+      ...this.middlewares,
+      ...(Array.isArray(this.handler) ? this.handler : [this.handler])
+    ]) as T;
+    return this.composedHandler as T;
   }
 }

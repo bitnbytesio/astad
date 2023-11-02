@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+globs=(
+  './src/container/*.spec.ts'
+  './src/http/router/*.spec.ts'
+)
+
+files=$(printf " %s" "${globs[@]}")
+
+
+NODE_OPTIONS="--loader ts-node/esm --experimental-specifier-resolution=node" npx tap $files -- --ts
+
+# # router
+# NODE_OPTIONS=\"--loader ts-node/esm --experimental-specifier-resolution=node\" npx tap ./src/http/router/*.spec.ts -- --ts
+
+# # services
+# NODE_OPTIONS="--loader ts-node/esm --experimental-specifier-resolution=node" npx tap ./src/services/**/*.spec.ts -- --ts
+
+# # http middlewares
+# NODE_OPTIONS="--loader ts-node/esm --experimental-specifier-resolution=node" npx tap ./src/http/middlewares/*.spec.ts -- --ts
+
+# # http apis
+# NODE_OPTIONS="--loader ts-node/esm --experimental-specifier-resolution=node" npx tap ./src/http/api/*.spec.ts -- --ts

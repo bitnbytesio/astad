@@ -55,7 +55,7 @@
   },
   "scripts": {
     "compile": "npx tsc -p tsconfig.json && npx tsc -p cjs.tsconfig.json && node fixup.js",
-    "test": "NODE_OPTIONS=\"--loader ts-node/esm --experimental-specifier-resolution=node\" tap ./src/http/router/*.spec.ts -- --ts"
+    "test": "./test"
   },
   "repository": {
     "type": "git",

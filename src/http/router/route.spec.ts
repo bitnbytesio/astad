@@ -22,17 +22,31 @@ t.test('HttpRoute::dynamic', async t => {
 });
 
 t.test('HttpRoute::middleware', async t => {
-  const rout1 = new HttpRoute(['GET', 'POST'], '/:id', (ctx: any) => ctx.body = 'dynamic');
+  // should override body
+  const rout0 = new HttpRoute(['GET', 'POST'], '/:id', (ctx: any) => ctx.body = 'dynamic');
+  rout0.middleware((ctx: any, next: any) => {
+    ctx.body = { m: 1 };
+    return next();
+  });
+  t.type(rout0.getHandler(), 'function');
+  const handle0 = rout0.getComposedHandler();
+  const ctx0: any = {};
+  await handle0(ctx0, async () => { });
+  t.equal(ctx0.body, 'dynamic');
+
+
+  // should increment middleware m
+  const rout1 = new HttpRoute(['GET', 'POST'], '/:id', (ctx: any) => ctx.body = { m: ctx.body.m + 1 });
   rout1.middleware((ctx: any, next: any) => {
     ctx.body = { m: 1 };
     return next();
   });
-  t.type(rout1.getHandler(), 'array');
+  t.type(rout1.getHandler(), 'function');
   const handle1 = rout1.getComposedHandler();
   const ctx1: any = {};
   await handle1(ctx1, async () => { });
-  t.equal(ctx1.body, 'dynamic');
-
+  t.type(ctx1.body, 'object');
+  t.equal(ctx1.body.m, 2);
 
   // abort in middleware
   // middleware will not handover control
@@ -40,7 +54,6 @@ t.test('HttpRoute::middleware', async t => {
   rout2.middleware((ctx: any, next: any) => {
     ctx.body = { m: 1 };
   });
-  t.type(rout2.getHandler(), 'array');
   const handle2 = rout2.getComposedHandler();
   const ctx2: any = {};
   await handle2(ctx2, async () => { });
@@ -53,7 +66,6 @@ t.test('HttpRoute::middleware', async t => {
     await next();
     ctx.body.ok += 1;
   });
-  t.type(rout3.getHandler(), 'array');
   const handle3 = rout3.getComposedHandler();
   const ctx3: any = {};
   await handle3(ctx3, async () => { });

@@ -20,6 +20,7 @@ export interface IHttpAssetOpts {
   files: Array<string | { path: string, mime: string }>
   cache: boolean
   debug: boolean
+  allowRange?: boolean
 }
 
 export class HttpAsset {
@@ -30,7 +31,11 @@ export class HttpAsset {
 
   async setup() {
     for (const file of this.opts.files) {
-      const store = await this.info(typeof file == 'string' ? file : file.path);
+      const fpath = typeof file == 'string' ? file : file.path;
+      const store = await this.info(fpath);
+      if (!store) {
+        throw new Error(`File ${fpath} not found or is not readable.`);
+      }
       if (typeof file == 'object' && file.mime) {
         store.mime = file.mime;
       }
@@ -56,28 +61,58 @@ export class HttpAsset {
    * @param file 
    * @returns 
    */
-  async info(file: string): Promise<IFileinfo> {
+  async info(file: string): Promise<IFileinfo | null> {
     if (this.store[file]) {
       return this.store[file];
     }
-    const info = await stat(file);
-    const mime = GuessMime(file);
-    return this.store[file] = {
-      size: info.size,
-      modified: info.mtime,
-      checksome: await checksum(file),
-      mime,
-    };
+    try {
+      const info = await stat(file);
+      const mime = GuessMime(file);
+      return this.store[file] = {
+        size: info.size,
+        modified: info.mtime,
+        checksome: await checksum(file),
+        mime,
+      };
+    } catch (_: any) {
+      return null;
+    }
+  }
+
+  streamOptions(ctx: IHttpContext) {
+    const options: any = {};
+    if (this.opts.allowRange) {
+      const range = ctx.headers.get('range');
+      if (range && range.startsWith('bytes=')) {
+        const [positions] = range.replace(/bytes=/, '').split('-');
+        options.start = parseInt(positions[0], 10);
+        if (positions[1]) {
+          const end = parseInt(positions[1], 10);
+          if (end && !Number.isNaN(end)) {
+            options.end = end;
+          }
+        }
+      }
+    }
+    return options;
   }
 
   async file(ctx: IHttpContext, file: IHttpAssetFile, head = false) {
     const absfile = path.join(this.opts.root, file.path);
     const info = await this.info(absfile);
-    if (!this.opts.debug) {
-      ctx.headers.set('Content-Length', info.size.toString());
+    if (!info) {
+      ctx.abort(404);
+      return;
     }
-    ctx.headers.set('ETag', info.checksome);
+
+    if (!this.opts.debug) {
+      // content length may vary in debug mode
+      ctx.headers.set('Content-Length', info.size.toString());
+      ctx.headers.set('ETag', info.checksome);
+    }
+
     if (this.opts.cache && !this.opts.debug) {
+      // only set cache-control, we cache enabled and not in debug mode
       const etag = ctx.headers.get('if-none-match');
       if (etag && etag === info.checksome) {
         ctx.abort(304);
@@ -87,7 +122,12 @@ export class HttpAsset {
       ctx.headers.set('Cache-Control', `public, max-age=${this.maxAgeSeconds}`);
     }
     if (!head) {
-      ctx.stream(createReadStream(absfile), file.mime || info.mime);
+      const options = this.streamOptions(ctx);
+      ctx.reply({
+        status: options.start ? 206 : 200,
+        body: createReadStream(absfile, options),
+        headers: { 'content-type': file.mime || info.mime },
+      });
     }
   }
 
@@ -101,6 +141,11 @@ export class HttpAsset {
 
   image(ctx: IHttpContext, file: string, type: string = 'jpg') {
     return this.file(ctx, { path: file, mime: `image/${type}` });
+  }
+
+  async hasAsset(relativePath: string) {
+    const absfile = path.join(this.opts.root, relativePath);
+    return await this.info(absfile) != null;
   }
 }
 

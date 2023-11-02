@@ -80,7 +80,7 @@ export class HttpApp {
           // find route
           const route = this._router.find(ctx.method as any, ctx.path, ctx.params);
           if (route) {
-            // execute route
+            // execute route, it will handover control to next middleware
             await route.getComposedHandler()(ctx, next);
             return;
           }
@@ -98,10 +98,9 @@ export class HttpApp {
         const resultError = ResultError.try(err);
         if (ctx.accepts('html')) {
           if (this.viewProvider) {
-            this.viewProvider.renderError(ctx, resultError)
+            await this.viewProvider.renderError(ctx, resultError)
           }
-        } else {
-          
+        } else {          
           const data: any = { message };
           if (err.status == 422 && err.errors) {
             data.errors = err.errors;
@@ -190,10 +189,10 @@ export interface IHttpAppOpts {
 }
 
 export interface IHttpMiddleware {
-  handle(ctx: any, next: any): Promise<any>
+  handle(ctx: IHttpContext, next: any): Promise<any>
 }
 
-export type HttpMiddlewareCallback = (ctx: any, next: any) => Promise<any>;
+export type HttpMiddlewareCallback = (ctx: IHttpContext, next: any) => Promise<any>;
 
 export type HttpAppMiddleware = HttpMiddlewareCallback | IHttpMiddleware;
 
