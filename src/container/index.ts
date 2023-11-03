@@ -40,6 +40,32 @@ export class Container {
     this.id = id;
   }
 
+  findRegistryValue(id: ContainerValueIdentifier) {
+    return this.registry.get(id);
+  }
+
+  putRegistryValue(value: ContainerValue) {
+    this.registry.set(value.id, value);
+  }
+
+  cloneWith(id: ContainerIdentifer, ...args: ContainerValueIdentifier[]) {
+    const container = new Container(id);
+    for (const arg of args) {
+      const serviceValue = this.findRegistryValue(arg);
+      if (!serviceValue) {
+        throw this.createErrorWithIdentifier(arg, 'Identifier %id not exists.');
+      }
+      container.register(serviceValue);
+    }
+    return container;
+  }
+
+  /**
+   * create error with identifier
+   * @param id container id
+   * @param message error message
+   * @returns 
+   */
   createErrorWithIdentifier(id: ContainerValueIdentifier, message: string) {
     let idstr = 'unk';
     // @ts-ignore
@@ -53,6 +79,11 @@ export class Container {
     return new Error(message.replace('%id', idstr));
   }
 
+  /**
+   * add or replace
+   * @param {ContainerValue} data
+   * @param {boolean} replace
+   */
   register(data: ContainerValue, replace = false) {
     if (this.registry.has(data.id) && !replace) {
       throw new Error('Identifier already exists.');
@@ -75,49 +106,56 @@ export class Container {
     this.registry.set(data.id, data);
   }
 
+  delete(id: ContainerValueIdentifier) {
+    this.registry.delete(id);
+    this.resolvedRegistry.delete(id);
+  }
+
+  has(id: ContainerValueIdentifier) {
+    return this.registry.has(id);
+  }
+
+  /**
+   * only set if not exists
+   * @param data
+   * @returns
+   */
   set(data: ContainerValue) {
     return this.register(data);
   }
 
+  /**
+   * set or replace
+   * @param data
+   * @returns
+   */
   put(data: ContainerValue) {
     return this.register(data, true);
   }
 
+  /**
+   * value scope, for static values
+   * @param id 
+   * @returns 
+   */
   value<T>(id: ContainerValueIdentifier): T {
     const data = this.registry.get(id);
     if (!data) {
       throw this.createErrorWithIdentifier(id, 'Identifier(%id) not found.');
     }
 
-    if (!(data as any).value) {
+    if (!(data as any).value || data.scope != ContainerScope.Value) {
       throw this.createErrorWithIdentifier(id, 'Identifier(%id) does not have a value.');
     }
 
     return (data as IContainerValue).value;
   }
 
-  protected valueResolver(data: ContainerValue) {
-    const value = (data as IContainerValue).value;
-    if (value) {
-      if (isClass(value)) {
-        return new (value as any)();
-      }
-      if (isFunction(value)) {
-        return (value as any)();
-      }
-      return value;
-    }
-    const factory = (data as IContainerFactory).factory as Function;
-
-    return factory.apply(null, (data as IContainerFactory).deps.map(dep => this.resolve(dep)));
-  }
-
-  protected factoryResolver(data: ContainerValue) {
-    const factory = (data as IContainerFactory).factory as Function;
-
-    return factory.apply(null, (data as IContainerFactory).deps.map(dep => this.resolve(dep)));
-  }
-
+  /**
+   * check if container already have resolved value
+   * @param id
+   * @returns
+   */
   hasResolved(id: ContainerValueIdentifier): boolean {
     const data = this.registry.get(id);
     if (!data) {
@@ -147,10 +185,47 @@ export class Container {
 
   }
 
+  protected valueResolver(data: ContainerValue) {
+    const value = (data as IContainerValue).value;
+    if (value) {
+      if (isClass(value)) {
+        return new (value as any)();
+      }
+      if (isFunction(value)) {
+        return (value as any)();
+      }
+      return value;
+    }
+    const factory = (data as IContainerFactory).factory as Function;
+
+    return factory.apply(null, (data as IContainerFactory).deps.map(dep => this.resolve(dep)));
+  }
+
+  /**
+   * unused
+   * @param data
+   * @returns
+   */
+  protected factoryResolver(data: ContainerValue) {
+    const factory = (data as IContainerFactory).factory as Function;
+
+    return factory.apply(null, (data as IContainerFactory).deps.map(dep => this.resolve(dep)));
+  }
+
+  /**
+   * use to resolve async deps
+   * @param id
+   * @returns
+   */
   resolveAsync<T>(id: ContainerIdentifer) {
     return this.resolve(id) as Promise<T>;
   }
 
+  /**
+   * resolve service with given identifier
+   * @param id
+   * @returns
+   */
   resolve<T>(id: ContainerValueIdentifier): T {
     const data = this.registry.get(id);
     if (!data) {
@@ -186,6 +261,12 @@ export class Container {
     throw this.createErrorWithIdentifier(id, 'Unable to resolve identifier(%id).');
   }
 
+  /**
+   * does not consider/respect scope, always return fresh value if possible, 
+   * as static value will be always be stale
+   * @param id
+   * @returns
+   */
   fresh<T>(id: ContainerValueIdentifier): T {
     const data = this.registry.get(id);
     if (!data) {
@@ -195,14 +276,29 @@ export class Container {
     return this.valueResolver(data);
   }
 
+  /**
+   * call a function with given deps
+   * @param cb
+   * @param deps
+   * @returns
+   */
   call(cb: Function, deps: Array<ContainerIdentifer> = []) {
     return cb(...deps.map(dep => this.resolve(dep)));
   }
 
+  /**
+   * call a async function or when you have async deps
+   * @param cb
+   * @param deps
+   * @returns
+   */
   async callAsync(cb: Function, deps: Array<ContainerIdentifer> = []) {
     return await cb(...await Promise.all(deps.map(dep => this.resolveAsync(dep))));
   }
 
+  /**
+   * pre-resolve all Singleton deps
+   */
   preresolve() {
     for (const id of this.registry.keys()) {
       const data = this.registry.get(id) as ContainerValue;
@@ -212,15 +308,19 @@ export class Container {
     }
   }
 
+  /**
+   * each context will have different registry
+   * @returns
+   */
   protected ctxRegistry(): Map<ContainerValueIdentifier, any> {
     if (!this.asyncLocalStorage) {
       throw new Error('context not available.');
     }
     const store = this.asyncLocalStorage.getStore();
-    if (!store['contextRegistryKey']) {
-      return store['contextRegistryKey'] = new Map;
+    if (!store[Container.contextRegistryKey]) {
+      return store[Container.contextRegistryKey] = new Map;
     }
-    return store['contextRegistryKey'];
+    return store[Container.contextRegistryKey];
   }
 
   setAsyncLocalStorage(asyncLocalStorage: AsyncLocalStorage<any>) {
