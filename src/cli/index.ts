@@ -1,7 +1,7 @@
 import * as util from 'node:util';
 import * as readline from 'node:readline';
 
-import { FgYellow, Reset } from './color.js';
+import { FgRed, FgYellow, Reset } from './color.js';
 import { composeAsync } from '../support/compose.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
@@ -69,8 +69,16 @@ export class CliContext {
     console.info(`${FgYellow}${message}${Reset}`);
   }
 
+  error(message: string) {
+    console.error(`${FgRed}${message}${Reset}`);
+  }
+
   infof(message: string, ...arg: any) {
     console.info(`${FgYellow}%s${Reset}`, util.format(message, ...arg));
+  }
+
+  json(data: any) {
+    console.log(JSON.stringify(data, null, 2));
   }
 
   prompt(question: string) {
@@ -346,16 +354,16 @@ export class CommandCompose {
   }
 }
 
-export interface ICommandFlag<T = any> extends ICommandArg<T> {
-  alias: string
-  multiple: boolean
-}
-
 export interface ICommandArg<T = any> {
   name: string
-  default: T
+  default?: T
   value?: T
-  type: Boolean | Number | String
+  type?: Boolean | Number | String
+}
+
+export interface ICommandFlag<T = any> extends ICommandArg<T> {
+  alias?: string
+  multiple?: boolean
 }
 
 export interface ICliMiddleware {
