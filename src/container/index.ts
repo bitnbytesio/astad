@@ -67,7 +67,7 @@ export class Container {
    * @returns 
    */
   createErrorWithIdentifier(id: ContainerValueIdentifier, message: string) {
-    let idstr = 'unk';
+    let idstr = null;
     // @ts-ignore
     if (id.name) {
       // @ts-ignore
@@ -76,7 +76,7 @@ export class Container {
     if (!idstr && typeof id.toString == 'function') {
       idstr = id.toString();
     }
-    return new Error(message.replace('%id', idstr));
+    return new Error(message.replace('%id', idstr || 'unk'));
   }
 
   /**
