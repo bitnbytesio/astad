@@ -38,6 +38,8 @@ export interface IHttpContext {
   secure: boolean
   ip: string
   ips: string[]
+  response: IHttpResponse
+  aborted: boolean
   is(...types: string[]): string | null | false
   accepts(...types: string[]): string | false
   getHeader(key: string): string | string[] | undefined
@@ -46,14 +48,20 @@ export interface IHttpContext {
   created(): void
   throw(status: number, message: string): never
   abort(status: number, message?: string): void
-  abort(error:IHttpError): void
+  abort(error: IHttpError): void
   reply(response: IHttpResponse): void
   view(template: any, data?: any, status?: number): Promise<any>
   stream(stream: internal.Readable, mime?: string): void
   redirect(url: string, alt?: string): void
   // shouldRender(): boolean
   // getView(): { template: string, data: any }
+  /**
+   * @deprecated use put() instead
+   * @param key 
+   * @param value 
+   */
   set<T = any>(key: any, value: T): T
+  put<T = any>(key: any, value: T): T
   value<T = any>(key: any): T | undefined
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "astad",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "description": "astad is a nodejs framework for api and web development",
   "main": "./cjs/index.js",
   "module": "./esm/index.js",

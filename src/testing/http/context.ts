@@ -21,6 +21,7 @@ export class TestHttpContext implements IHttpContext {
     body: undefined,
     redirect: undefined,
   }
+  aborted: boolean = false;
 
   protected _reply: IHttpResponse | null = null;
 
@@ -155,6 +156,7 @@ export class TestHttpContext implements IHttpContext {
 
 
   abort(...args: any): void {
+    this.aborted = true;
     if (args.length == 1) {
       if (typeof args[0] == 'number') {
         this.response.status = args[0];
@@ -208,6 +210,10 @@ export class TestHttpContext implements IHttpContext {
   // }
 
   set<T = any>(key: any, value: T): T {
+    return this.state[key] = value
+  }
+
+  put<T = any>(key: any, value: T): T {
     return this.state[key] = value
   }
 

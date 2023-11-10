@@ -41,7 +41,8 @@ export class HttpKoaContext implements IHttpContext {
   params = {};
   willRender = false;
   state: Record<any, any> = {};
-
+  response: IHttpResponse<any> = { status: 404 };
+  aborted = false;
   protected _reply: IHttpResponse | null = null;
 
   constructor(protected ctx: any) {
@@ -115,18 +116,19 @@ export class HttpKoaContext implements IHttpContext {
   }
 
   json(data: any, status = 200) {
-    this.ctx.status = status;
-    this.ctx.body = data;
+    this.headers.set('content-type', 'application/json');
+    this.ctx.status = this.response.status = status;
+    this.ctx.body = this.response.body = data;
   }
 
   noContent() {
-    this.ctx.status = 204;
-    this.ctx.body = undefined;
+    this.ctx.status = this.response.status = 204;
+    this.ctx.body = this.response.body = undefined;
   }
 
   created() {
-    this.ctx.status = 201;
-    this.ctx.body = undefined;
+    this.ctx.status = this.response.status = 201;
+    this.ctx.body = this.response.body = undefined;
   }
 
   throw(status: number, message: string) {
@@ -136,27 +138,25 @@ export class HttpKoaContext implements IHttpContext {
   abort(error: IHttpError): void;
   abort(status: number, message?: string): void;
   abort(...args: any): void {
+    this.aborted = true;
     if (args.length == 1) {
       if (typeof args[0] == 'number') {
-        this.ctx.status = args[0];
-        this.ctx.body = { message: 'Something went wrong.' };
+        this.ctx.status = this.response.status = args[0];
+        this.ctx.body = this.response.body = { message: 'Something went wrong.' };
         return;
       }
 
       const err = args[0] as IHttpError
-      this.ctx.status = err.status;
-      this.ctx.body = { message: err.message, ...(err.data || {}) };
+      this.ctx.status = this.response.status = err.status;
+      this.ctx.body = this.response.body = { message: err.message, ...(err.data || {}) };
       return
     }
-    this.ctx.status = args[0];
-    this.ctx.body = { message: args[1] || 'Something went wrong.', ...(args[2] || {}) };
+    this.ctx.status = this.response.status = args[0];
+    this.ctx.body = this.response.body = { message: args[1] || 'Something went wrong.', ...(args[2] || {}) };
   }
 
-  /**
-   * ununsed
-   * @param response 
-   */
   reply(response: IHttpResponse) {
+    this.response = response;
     if (response.headers) {
       for (const key in response.headers) {
         this.ctx.set(key, response.headers[key]);
@@ -167,9 +167,9 @@ export class HttpKoaContext implements IHttpContext {
   }
 
   stream(stream: internal.Readable, mime: string = 'application/octet-stream') {
-    this.ctx.status = 200;
+    this.ctx.status = this.response.status = 200;
     this.ctx.type = mime;
-    this.ctx.body = stream;
+    this.ctx.body = this.response.body = stream;
   }
 
   redirect(url: string, alt?: string) {
@@ -181,7 +181,8 @@ export class HttpKoaContext implements IHttpContext {
     if (!view) {
       throw new Error('view engine is not set.');
     }
-    this.ctx.status = status;
+    this.ctx.status = this.response.status = status;
+    this.response.body = { template, data };
     this.ctx.body = await view.render(this, template, data);
     this.willRender = true;
   }
@@ -194,7 +195,17 @@ export class HttpKoaContext implements IHttpContext {
   //   return this.ctx.body;
   // }
 
+  /**
+   * @deprecated use put() instead
+   * @param key 
+   * @param value 
+   * @returns 
+   */
   set<T = any>(key: any, value: T): T {
+    return this.state[key] = value
+  }
+
+  put<T = any>(key: any, value: T): T {
     return this.state[key] = value
   }
 

@@ -9,7 +9,8 @@ export interface IHttpError {
 export interface IHttpResponse<T = any> {
   body?: T
   status: number
-  headers?: Record<string, string>
+  headers?: Record<string, string | string[]>
+  redirect?: { url: string, alt?: string }
 }
 
 export class HttpResponse {

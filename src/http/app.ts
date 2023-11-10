@@ -72,8 +72,8 @@ export class HttpApp {
         const reqid = this.correlationIdGenerator().toString();
         ctx.headers.set('x-req-id', reqid);
         // put view provider in context
-        ctx.set(HTTP_KEY_REQ_ID, reqid);
-        ctx.set(HTTP_KEY_VIEW_PROVIDER, this.viewProvider);
+        ctx.put(HTTP_KEY_REQ_ID, reqid);
+        ctx.put(HTTP_KEY_VIEW_PROVIDER, this.viewProvider);
 
         // execute application middlewares
         await this.composedMiddleware(ctx, async (ctx: IHttpContext, next: any) => {
@@ -88,6 +88,13 @@ export class HttpApp {
           // handover control to next middleware
           await next();
         });
+
+        if (ctx.aborted && (this.viewProvider && ctx.accepts('html'))) {
+          ctx.reply({
+            status: ctx.response.status,
+            body: await this.viewProvider.renderError(ctx, { status: ctx.response.status, ...ctx.response.body }),
+          });
+        }
       } catch (err: any) {
         console.error(err);
         // if (ctx.accepts('json')) {
@@ -96,11 +103,9 @@ export class HttpApp {
         err.status = err.statusCode || err.status || err.code || 500;
         const message = err.status < 500 || err.expose ? err.message : 'Internal server error.';
         const resultError = ResultError.try(err);
-        if (ctx.accepts('html')) {
-          if (this.viewProvider) {
-            await this.viewProvider.renderError(ctx, resultError)
-          }
-        } else {          
+        if (this.viewProvider && ctx.accepts('html')) {
+          await this.viewProvider.renderError(ctx, resultError);
+        } else {
           const data: any = { message };
           if (err.status == 422 && err.errors) {
             data.errors = err.errors;

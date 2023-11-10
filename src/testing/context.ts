@@ -9,6 +9,10 @@ export class TestMinimalContext {
     return this.state[key] = value
   }
 
+  put<T = any>(key: any, value: T): T {
+    return this.state[key] = value
+  }
+
   value<T = any>(key: any): T | undefined {
     return this.state[key];
   }
