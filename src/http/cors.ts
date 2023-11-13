@@ -36,7 +36,7 @@ export class HttpCors {
 
   static middleware(opts: Partial<HttpCorsOpts> = {}) {
     const cors = new HttpCors(opts);
-    return cors.handle;
+    return cors.handle.bind(this);
   }
 
   /**

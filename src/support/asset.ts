@@ -45,7 +45,7 @@ export class HttpAsset {
 
   routes(options?: Partial<IRouterOptions>) {
     const handler = async (ctx: IHttpContext) => {
-      await this.file(ctx, { path: ctx.path }, ctx.method.toLowerCase() == 'head');
+      await this.file(ctx, { path: ctx.path });
     };
     const route = new HttpRouter(options);
     for (const file of this.opts.files) {
@@ -97,7 +97,8 @@ export class HttpAsset {
     return options;
   }
 
-  async file(ctx: IHttpContext, file: IHttpAssetFile, head = false) {
+  async file(ctx: IHttpContext, file: IHttpAssetFile, head?: boolean) {
+    head = head || ctx.method.toLowerCase() == 'head';
     const absfile = path.join(this.opts.root, file.path);
     const info = await this.info(absfile);
     if (!info) {
@@ -128,7 +129,13 @@ export class HttpAsset {
         body: createReadStream(absfile, options),
         headers: { 'content-type': file.mime || info.mime },
       });
+      return;
     }
+    ctx.reply({
+      status: 200,
+      body: '',
+      headers: { 'content-type': file.mime || info.mime },
+    });
   }
 
   css(ctx: IHttpContext, file: string) {
@@ -152,4 +159,120 @@ export class HttpAsset {
 export interface IHttpAssetFile {
   path: string
   mime?: string
+}
+
+export interface IHttpAssetMiddlewareOpts {
+  root: string
+  debug: boolean
+  cache: boolean
+  maxAgeSeconds: number
+}
+
+export class HttpAssetMiddleware {
+  store: Record<string, any> = {};
+  maxAgeSeconds = 60; // 200*24*60*60
+
+  constructor(readonly opts: IHttpAssetMiddlewareOpts) { }
+
+  static middleware(opts: IHttpAssetMiddlewareOpts) {
+    const cors = new HttpAssetMiddleware(opts);
+    return cors.handle.bind(this);
+  }
+
+
+  async handle(ctx: IHttpContext, next: any) {
+    await next();
+    if (ctx.response.status == 404) {
+      this.file(ctx, { path: ctx.path });
+    }
+  }
+
+  /**
+  * caution: returns ref to object
+  * @param file 
+  * @returns 
+  */
+  async info(file: string): Promise<IFileinfo | null> {
+    if (this.store[file]) {
+      return this.store[file];
+    }
+    try {
+      const info = await stat(file);
+      const mime = GuessMime(file);
+      return this.store[file] = {
+        size: info.size,
+        modified: info.mtime,
+        checksome: await checksum(file),
+        mime,
+      };
+    } catch (_: any) {
+      return null;
+    }
+  }
+
+  streamOptions(ctx: IHttpContext) {
+    const options: any = {};
+    //if (this.opts.allowRange) {
+    const range = ctx.headers.get('range');
+    if (range && range.startsWith('bytes=')) {
+      const [positions] = range.replace(/bytes=/, '').split('-');
+      options.start = parseInt(positions[0], 10);
+      if (positions[1]) {
+        const end = parseInt(positions[1], 10);
+        if (end && !Number.isNaN(end)) {
+          options.end = end;
+        }
+      }
+    }
+    //}
+    return options;
+  }
+
+  async file(ctx: IHttpContext, file: IHttpAssetFile, head?: boolean) {
+    head = head || ctx.method.toLowerCase() == 'head';
+    const absfile = path.join(this.opts.root, file.path);
+    const info = await this.info(absfile);
+    if (!info) {
+      ctx.abort(404);
+      return;
+    }
+
+    if (!this.opts.debug) {
+      // content length may vary in debug mode
+      ctx.headers.set('Content-Length', info.size.toString());
+      ctx.headers.set('ETag', info.checksome);
+    }
+
+    if (this.opts.cache && !this.opts.debug) {
+      // only set cache-control, we cache enabled and not in debug mode
+      const etag = ctx.headers.get('if-none-match');
+      if (etag && etag === info.checksome) {
+        ctx.abort(304);
+        return;
+      }
+
+      ctx.headers.set('Cache-Control', `public, max-age=${this.maxAgeSeconds}`);
+    }
+    if (!head) {
+      const options = this.streamOptions(ctx);
+      try {
+        // TODO: prune from info incase file is not available
+        const body = createReadStream(absfile, options);
+        ctx.reply({
+          status: options.start ? 206 : 200,
+          body,
+          headers: { 'content-type': file.mime || info.mime },
+        });
+      } catch {
+        delete this.store[absfile];
+      }
+      return;
+    }
+
+    ctx.reply({
+      status: 200,
+      body: '',
+      headers: { 'content-type': file.mime || info.mime },
+    });
+  }
 }
