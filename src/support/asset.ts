@@ -163,6 +163,8 @@ export interface IHttpAssetFile {
 
 export interface IHttpAssetMiddlewareOpts {
   root: string
+  prefix?: string
+  index?: string
   debug: boolean
   cache: boolean
   maxAgeSeconds: number
@@ -183,7 +185,15 @@ export class HttpAssetMiddleware {
   async handle(ctx: IHttpContext, next: any) {
     await next();
     if (ctx.response.status == 404) {
-      this.file(ctx, { path: ctx.path });
+      let fpath = ctx.path;
+      if (this.opts.prefix) {
+        fpath = fpath.replace(this.opts.prefix, '');
+        if ((!fpath || fpath == '/') && this.opts.index) {
+          fpath = this.opts.index;
+        }
+      }
+      console.log('figured fpath from ctx.path', fpath, ctx.path)
+      this.file(ctx, { path: fpath });
     }
   }
 

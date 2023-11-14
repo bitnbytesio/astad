@@ -240,26 +240,28 @@ export class CliApplication {
 
     const commandarg = parsed[0];
     // handle fallback, incase command arg not present
-    const command = this.find(commandarg.arg);
-    if (command) {
-      const composed = command.compose();
-      const ctx = new CliContext(exec, script, composed);
-      processCommand(ctx, parsed);
-      ctx.set('command', command);
+    const command = this.find(commandarg.arg) || this._fallback;
 
-      if (this.asyncLocalStorage) {
-        return await (this.asyncLocalStorage as AsyncLocalStorage<any>).run(ctx, async () => {
-          await composedMiddleware(ctx, async () => {
-            await command.handle(ctx);
-          });
+    if (!command) {
+      throw new Error(`invalid command ${command}`);
+    }
+
+    const composed = command.compose();
+    const ctx = new CliContext(exec, script, composed);
+    processCommand(ctx, parsed);
+    ctx.set('command', command);
+
+    if (this.asyncLocalStorage) {
+      return await (this.asyncLocalStorage as AsyncLocalStorage<any>).run(ctx, async () => {
+        await composedMiddleware(ctx, async () => {
+          await command.handle(ctx);
         });
-      }
-
-      await composedMiddleware(ctx, async () => {
-        await command.handle(ctx);
       });
     }
 
+    await composedMiddleware(ctx, async () => {
+      await command.handle(ctx);
+    });
   }
 }
 

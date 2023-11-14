@@ -98,6 +98,7 @@ export default api;
 import { Astad, AstadContext, AstadCompose } from 'astad';
 
 class TestCommand {
+  // note: signature is important, as register command will use this property 
   signature: string = "test";
 
   description: string = "This is test command!";
@@ -218,7 +219,8 @@ t.test('service', async t => {
 - http: should consider accept header
 - http: should compose or translate error to response
 - http: improve throw in context, should accept error and custom inputs
-- container: improve guess identifier name in errors
+- http/cors: should allow vary header configuration, for asset caching
+- docs: automate documentation
 
 ## In-progress
 - events handler
