@@ -35,6 +35,7 @@ export class HttpKoa {
 }
 
 export class HttpKoaContext implements IHttpContext {
+  static defaultAbortMessage = 'Something went wrong.';
   query: HttpRequestQuery;
   headers: HttpRequestHeaders;
   cookies: IHttpCookies;
@@ -142,17 +143,18 @@ export class HttpKoaContext implements IHttpContext {
     if (args.length == 1) {
       if (typeof args[0] == 'number') {
         this.ctx.status = this.response.status = args[0];
-        this.ctx.body = this.response.body = { message: 'Something went wrong.' };
+        this.ctx.body = this.response.body = {};
         return;
       }
 
       const err = args[0] as IHttpError
       this.ctx.status = this.response.status = err.status;
-      this.ctx.body = this.response.body = { message: err.message, ...(err.data || {}) };
+      const message = err.expose ? err.message : HttpKoaContext.defaultAbortMessage;
+      this.ctx.body = this.response.body = { message, ...(err.data || {}) };
       return
     }
     this.ctx.status = this.response.status = args[0];
-    this.ctx.body = this.response.body = { message: args[1] || 'Something went wrong.', ...(args[2] || {}) };
+    this.ctx.body = this.response.body = { message: args[1] || HttpKoaContext.defaultAbortMessage, ...(args[2] || {}) };
   }
 
   reply(response: IHttpResponse) {

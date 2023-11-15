@@ -1,22 +1,67 @@
+export interface IHttpError {
+  status: number
+  message: string
+  expose?: boolean
+  data?: any
+}
+
 type ResultErrorInput = IResultErrorAttributes | ResultError | Error;
 
-export class Result<V = any, E = ResultErrorInput> {
-  constructor(readonly value: V | E, readonly ok: boolean) { }
+export class Result<RValue = any, RError = ResultErrorInput> {
+  constructor(
+    readonly ok: boolean,
+    readonly _error: RError | null,
+    readonly _value: RValue | null = null
+  ) { }
 
-  error<T = ResultError>() {
-    return this.value as T;
+  get value() {
+    return (this._error || this._value) as RError | RValue;
+  }
+
+  getValue<V = RValue>() {
+    if (!this.ok) {
+      throw new Error(`Can't retrieve the value from a failed result.`);
+    }
+    return this._value as V;
+  }
+
+  getError<E = RError>() {
+    return this._error as E;
+  }
+
+  error() {
+    return this._error as ResultError;
   }
 
   static ok<V = any>(value: V) {
-    return new Result<V>(value, true);
+    return new Result<V>(true, null, value);
   }
-  static error<V = ResultError>(error: ResultErrorInput) {
-    return new Result<V>(ResultError.from(error), false);
+  static error<V = any>(error: ResultErrorInput) {
+    return new Result<V>(false, ResultError.from(error));
   }
 
-  // with() {
+  static allOk(...results: Result[]) {
+    const values = [];
+    for (const result of results) {
+      if (!result.ok) {
+        return result;
+      }
+      values.push(result.getValue());
+    }
 
-  // }
+    return Result.ok<typeof values>(values);
+  }
+
+  with() {
+
+  }
+}
+
+export interface IResult<RValue = any, RError = ResultErrorInput> {
+  value: RError | RValue
+  getValue<V = RValue>(): V
+  getError<E = RError>(): E
+  error(): ResultError
 }
 
 export interface IResultErrorAttributes {
@@ -95,11 +140,26 @@ export class ResultError extends Error {
     };
   }
 
-  toJSON() {
+  toHttpError(): IHttpError {
     return {
-      message: this.expose ? this.message : 'Internal server error.',
-      code: this.code,
-      ...(this.data || {}),
+      status: this.status,
+      message: this.message,
+      expose: this.expose,
+      data: { ...(this.data || {}) },
+
     };
+  }
+
+  toObject() {
+    return {
+      code: this.code,
+      message: this.message,
+      expose: this.expose,
+      data: { ...(this.data || {}) },
+    };
+  }
+
+  toJSON() {
+    return this.toObject();
   }
 }

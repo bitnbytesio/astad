@@ -56,7 +56,7 @@ export interface IHttpContext {
   // shouldRender(): boolean
   // getView(): { template: string, data: any }
   /**
-   * @deprecated use put() instead
+   * @deprecated Use {@link put} instead
    * @param key 
    * @param value 
    */

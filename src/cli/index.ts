@@ -102,7 +102,7 @@ export class CliContext {
     });
   }
 
-  throw(error: Error) {
+  throw(error: Error): never {
     throw error;
   }
 }

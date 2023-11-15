@@ -3,6 +3,7 @@ type ResponseHeaders = Record<string, string | string[]>;
 export interface IHttpError {
   status: number
   message: string
+  expose?: boolean
   data?: any
 }
 

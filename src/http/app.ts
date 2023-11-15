@@ -15,10 +15,14 @@ export class HttpApp {
   protected viewProvider: IViewEngine | null = null;
   protected correlationIdCount = 0;
   protected correlationIdGenerator: HttpCorrelationIdGenerator = () => this.correlationIdCount++;
+  protected errorListeners = [];
 
   constructor(protected opts: IHttpAppOpts) {
     if (this.opts.asyncLocalStorage) {
       this.asyncLocalStorage = this.opts.asyncLocalStorage instanceof AsyncLocalStorage ? this.opts.asyncLocalStorage : new AsyncLocalStorage();
+    }
+    if (!this.opts.defaultErrorMessage) {
+      this.opts.defaultErrorMessage = 'Internal server error.';
     }
     this._router = new HttpRouter();
   }
@@ -95,42 +99,29 @@ export class HttpApp {
             body: await this.viewProvider.renderError(ctx, { status: ctx.response.status, ...ctx.response.body }),
           });
         }
-      } catch (err: any) {
-        console.error(err);
-        // if (ctx.accepts('json')) {
 
-        // }
-        err.status = err.statusCode || err.status || err.code || 500;
-        const message = err.status < 500 || err.expose ? err.message : 'Internal server error.';
-        const resultError = ResultError.try(err);
+        // handover control to framework
+        await next();
+      } catch (err: any) {
+        if (this.opts.dontHandleException) {
+          throw err;
+        }
+
+        console.error(err);
+        err.code = err.statusCode || err.status || err.code || 500;
+        const message = err.code < 500 || err.expose ? err.message : this.opts.defaultErrorMessage as string;
+
         if (this.viewProvider && ctx.accepts('html')) {
+          const resultError = ResultError.try(err);
           await this.viewProvider.renderError(ctx, resultError);
         } else {
           const data: any = { message };
-          if (err.status == 422 && err.errors) {
+          if (err.code == 422 && err.errors) {
             data.errors = err.errors;
           }
-          ctx.json(data, err.status);
+          ctx.json(data, err.code);
         }
-        // if (ctx.accepts('json')) {
-        //   ctx.json(data, status);
-        // } else {
-        //   ctx.reply()
-        // }
       }
-
-      // template handling
-      // if (ctx.shouldRender()) {
-      //   // render view
-      //   if (!this._view) {
-      //     throw new Error('view engine is not set.');
-      //   }
-      //   const view = ctx.getView();
-      //   await this._view.render(view.template, view.data);
-      // }
-
-      // handover control to framework
-      await next();
     };
 
     if (this.asyncLocalStorage) {
@@ -188,9 +179,14 @@ export interface IHttpAppOptConf {
 export interface IHttpAppOpts {
   use: IHttpAppOptUse
   conf: IHttpAppOptConf
-  asyncLocalStorage?: true | AsyncLocalStorage<any>,
+  asyncLocalStorage?: boolean | AsyncLocalStorage<any>,
   host?: string,
   port?: number,
+  defaultErrorMessage?: string
+  /**
+   * set true, when you want to handle exception with framework instead of http app
+   */
+  dontHandleException?: boolean
 }
 
 export interface IHttpMiddleware {
