@@ -7,6 +7,7 @@ import { checksum } from './file.js';
 import { HttpRouter } from '../index.js';
 import { IRouterOptions } from '../http/router/contracts.js';
 import { GuessMime } from './mime.js';
+import { pathsafe } from './path.js';
 
 export interface IFileinfo {
   size: number
@@ -181,20 +182,37 @@ export class HttpAssetMiddleware {
     return cors.handle.bind(this);
   }
 
+  get prefix() {
+    return this.opts.prefix || '/';
+  }
+
 
   async handle(ctx: IHttpContext, next: any) {
     await next();
-    if (ctx.response.status == 404) {
-      let fpath = ctx.path;
-      if (this.opts.prefix) {
-        fpath = fpath.replace(this.opts.prefix, '');
-        if ((!fpath || fpath == '/') && this.opts.index) {
-          fpath = this.opts.index;
-        }
-      }
-      console.log('figured fpath from ctx.path', fpath, ctx.path)
-      this.file(ctx, { path: fpath });
+
+    if (ctx.response.status != 404) {
+      return;
     }
+
+    // skip if this is not a GET/HEAD request
+    if (ctx.method !== 'HEAD' && ctx.method !== 'GET') {
+      return;
+    }
+
+    let fpath = ctx.path;
+    const prefix = this.prefix;
+
+    if (fpath.indexOf(prefix) !== 0) {
+      return;
+    }
+
+    fpath = fpath.replace(prefix, '');
+
+    if ((!fpath || fpath == '/') && this.opts.index) {
+      fpath = this.opts.index;
+    }
+
+    await this.file(ctx, { path: fpath });
   }
 
   /**
@@ -240,11 +258,19 @@ export class HttpAssetMiddleware {
 
   async file(ctx: IHttpContext, file: IHttpAssetFile, head?: boolean) {
     head = head || ctx.method.toLowerCase() == 'head';
-    const absfile = path.join(this.opts.root, file.path);
+    if (file.path.startsWith('/')) {
+      file.path = file.path.slice(1);
+    }
+    const absfile = pathsafe(file.path, this.opts.root);
+    if (!absfile) {
+      console.log('absfile failed from ctx.path', file.path, ctx.path)
+      return false;
+    }
+    console.log('figured absfile from ctx.path', absfile, ctx.path)
     const info = await this.info(absfile);
     if (!info) {
-      ctx.abort(404);
-      return;
+      console.log('info not found')
+      return false;
     }
 
     if (!this.opts.debug) {
@@ -264,6 +290,7 @@ export class HttpAssetMiddleware {
       ctx.headers.set('Cache-Control', `public, max-age=${this.maxAgeSeconds}`);
     }
     if (!head) {
+      console.log('streaming found')
       const options = this.streamOptions(ctx);
       try {
         // TODO: prune from info incase file is not available
@@ -273,7 +300,8 @@ export class HttpAssetMiddleware {
           body,
           headers: { 'content-type': file.mime || info.mime },
         });
-      } catch {
+      } catch (err) {
+        console.log(err);
         delete this.store[absfile];
       }
       return;

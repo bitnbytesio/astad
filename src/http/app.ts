@@ -83,14 +83,13 @@ export class HttpApp {
         await this.composedMiddleware(ctx, async (ctx: IHttpContext, next: any) => {
           // find route
           const route = this._router.find(ctx.method as any, ctx.path, ctx.params);
-          if (route) {
-            // execute route, it will handover control to next middleware
-            await route.getComposedHandler()(ctx, next);
+          if (!route) {
+            // handover control to next middleware
+            await next();
             return;
           }
-
-          // handover control to next middleware
-          await next();
+          // execute route, it will handover control to next middleware
+          await route.getComposedHandler()(ctx, next);
         });
 
         if (ctx.aborted && (this.viewProvider && ctx.accepts('html'))) {

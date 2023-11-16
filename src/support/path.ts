@@ -25,3 +25,27 @@ export function safe(unsafepath: string, root?: string) {
   // join the relative path
   return path.normalize(path.join(path.resolve(root), unsafepath));
 }
+
+export function pathsafe(unsafepath: string, root?: string) {
+  if (!root) {
+    root = process.cwd();
+  }
+
+  // containing NULL bytes is malicious
+  if (unsafepath.indexOf('\0') !== -1) {
+    return false;
+  }
+
+  // path should never be absolute
+  if (path.isAbsolute(unsafepath)) {
+    return false;
+  }
+
+  // path outside root
+  if (UP_PATH_REGEXP.test(path.normalize('.' + path.sep + unsafepath))) {
+    return false;
+  }
+
+  // join the relative path
+  return path.normalize(path.join(path.resolve(root), unsafepath));
+}
