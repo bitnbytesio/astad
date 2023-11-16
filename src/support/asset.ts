@@ -98,6 +98,13 @@ export class HttpAsset {
     return options;
   }
 
+  /**
+   * @unsafe does not normalize paths
+   * @param ctx 
+   * @param file 
+   * @param head 
+   * @returns 
+   */
   async file(ctx: IHttpContext, file: IHttpAssetFile, head?: boolean) {
     head = head || ctx.method.toLowerCase() == 'head';
     const absfile = path.join(this.opts.root, file.path);
