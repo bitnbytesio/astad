@@ -1,3 +1,5 @@
+import { deepClone } from "../support/obj.js";
+
 export interface IEntitySource {
   toSource(): any
 }
@@ -20,7 +22,7 @@ export class EntityState {
   current: any = null;
 
   constructor(attrs: any) {
-    this.original = structuredClone(attrs);
+    this.original = deepClone(attrs);
     this.current = attrs;
   }
 

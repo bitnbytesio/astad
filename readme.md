@@ -231,3 +231,13 @@ t.test('service', async t => {
 
 ## Bugs
 - handle duplicate middlewares in router, should only have unique middlewares
+
+## Issue Notes
+Node.js[https://nodejs.org/api/stream.html#class-streamreadable]
+One important caveat is that if the Readable stream emits an error during processing, the Writable destination is not closed automatically. If an error occurs, it will be necessary to manually close each stream in order to prevent memory leaks.
+
+The process.stderr and process.stdout Writable streams are never closed until the Node.js process exits, regardless of the specified options.
+
+## Doc Notes
+- use "Deprecated since: version"
+- use "Added: version"

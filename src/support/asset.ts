@@ -51,7 +51,8 @@ export class HttpAsset {
     const route = new HttpRouter(options);
     for (const file of this.opts.files) {
       const abspath = typeof file == 'string' ? file : file.path;
-      const rpath = path.relative(this.opts.root, abspath);
+      // replace directory sep to support windows
+      const rpath = path.relative(this.opts.root, abspath).replace(/\\/g, '/');
       route.get(`/${rpath}`, handler);
     }
     return route;
@@ -270,13 +271,13 @@ export class HttpAssetMiddleware {
     }
     const absfile = pathsafe(file.path, this.opts.root);
     if (!absfile) {
-      console.log('absfile failed from ctx.path', file.path, ctx.path)
+      //console.log('absfile failed from ctx.path', file.path, ctx.path)
       return false;
     }
-    console.log('figured absfile from ctx.path', absfile, ctx.path)
+    //console.log('figured absfile from ctx.path', absfile, ctx.path)
     const info = await this.info(absfile);
     if (!info) {
-      console.log('info not found')
+      //console.log('info not found')
       return false;
     }
 
@@ -297,7 +298,7 @@ export class HttpAssetMiddleware {
       ctx.headers.set('Cache-Control', `public, max-age=${this.maxAgeSeconds}`);
     }
     if (!head) {
-      console.log('streaming found')
+      //console.log('streaming found')
       const options = this.streamOptions(ctx);
       try {
         // TODO: prune from info incase file is not available
@@ -308,7 +309,7 @@ export class HttpAssetMiddleware {
           headers: { 'content-type': file.mime || info.mime },
         });
       } catch (err) {
-        console.log(err);
+        console.error(err);
         delete this.store[absfile];
       }
       return;

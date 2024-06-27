@@ -1,5 +1,6 @@
 import * as internal from 'node:stream';
 import { IHttpError, IHttpResponse } from './response.js';
+import { deepClone } from '../support/obj.js';
 
 export interface IHttpCookieOpts {
   // maxAge: a number representing the milliseconds from Date.now() for expiry.
@@ -26,7 +27,13 @@ export interface IHttpContext {
   headers: HttpRequestHeaders
   cookies: IHttpCookies
   params: Record<string, string>
+  /**
+   * request body
+   */
   body: any
+  /**
+   * uploaded files
+   */
   files: any
   host: string
   path: string
@@ -103,6 +110,14 @@ export class HttpRequestHeaders {
   set(key: string, value: string) {
     this.setHeaderCb(key, value);
   }
+
+  /**
+   * @added v0.2.12
+   * @returns
+   */
+  toObject() {
+    return deepClone(this.headers);
+  }
 }
 
 export class HttpRequestQuery {
@@ -132,6 +147,10 @@ export class HttpRequestQuery {
       }
     }
     return qs.join('&');
+  }
+
+  toObject() {
+    return deepClone(this.query);
   }
 }
 

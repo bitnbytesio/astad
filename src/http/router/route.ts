@@ -67,6 +67,7 @@ export class HttpRoute<T = any> {
     }
 
     if (any) {
+      this.paramKeys.push('*');
       this._static = false;
     }
   }
