@@ -6,6 +6,7 @@ import { ISessionDriver } from "./contract.js";
 
 /**
  * @added v0.2.12
+ * TODO: protect driver against race conditions
  */
 export class SessionFileDriver implements ISessionDriver {
   _id: string | undefined;
@@ -14,13 +15,17 @@ export class SessionFileDriver implements ISessionDriver {
     return randomBytes(16).toString('hex');
   }
 
-  async id(): Promise<string> {
+  id(): string {
     return this._id as string;
+  }
+
+  getSessionFile(id?: string) {
+    return `${tmpdir()}/sess_${id || this._id}`;
   }
 
   async open(id?: string): Promise<string> {
     id = id || this.generateId();
-    const sessFile = `${tmpdir()}/sess_${id}`;
+    const sessFile = this.getSessionFile(id);
     let exists = false;
     try {
       await fs.stat(sessFile)
@@ -34,12 +39,12 @@ export class SessionFileDriver implements ISessionDriver {
   }
 
   async write(data: any): Promise<void> {
-    const sessFile = `${tmpdir()}/sess_${this._id}`;
+    const sessFile = this.getSessionFile();
     await fs.writeFile(sessFile, data);
   }
 
   async read(): Promise<any> {
-    const sessFile = `${tmpdir()}/sess_${this._id}`;
+    const sessFile = this.getSessionFile();
     return (await fs.readFile(sessFile)).toString();
   }
 
@@ -48,7 +53,7 @@ export class SessionFileDriver implements ISessionDriver {
   }
 
   async destroy(): Promise<void> {
-    const sessFile = `${tmpdir()}/sess_${this._id}`;
+    const sessFile = this.getSessionFile();
     await fs.unlink(sessFile);
   }
 

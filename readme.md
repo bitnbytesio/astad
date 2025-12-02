@@ -1,5 +1,21 @@
 # Astad
 
+A lightweight Node.js framework for building web applications and CLI tools.
+
+## Features
+
+- **HTTP Server** - Framework-agnostic HTTP application with routing, middleware, and CORS (supports Koa, Express, etc.)
+- **Session Management** - File-based sessions with flash data support
+- **Routing** - Flexible router with route groups, middleware, and parameter handling
+- **View Engine** - Pluggable template engine support (EJS, etc.)
+- **Static Assets** - Built-in static file serving with MIME type detection
+- **CLI Application** - Command-line application framework with argument parsing
+- **Container** - Dependency injection container with singleton, transient, and contextual scopes
+- **Events** - Event dispatcher for decoupled application components
+- **DAM** - Data access manager with MongoDB support
+- **Testing Utilities** - Route testing and minimal context for unit tests
+- **Support Utilities** - Collections, date helpers, file operations, path utilities, random generators
+
 ## Quick Start with Koajs
 ```ts
 import { HttpApp, HttpKoa, HttpCors } from 'astad';
@@ -33,8 +49,11 @@ httpApp.use(new HttpCors());
 
 // view engine if required
 httpApp.viewEngine(new class {
-  async render(template: string, data: Record<any, any> = {}) {
+  async render(ctx, template: string, data: Record<any, any> = {}) {
     return await ejs.renderFile(`./resources/views/${template}.ejs.html`, data);
+  }
+  async renderError(ctx, error) {
+    return await ejs.renderFile(`./resources/views/error.ejs.html`, { error });
   }
 });
 
@@ -93,15 +112,91 @@ export default api;
 
 ```
 
-## Console application
+## CORS Middleware
+
+The `HttpCors` class provides Cross-Origin Resource Sharing (CORS) support for handling preflight requests and setting appropriate headers.
+
+### Basic Usage
+
+```ts
+import { HttpApp, HttpCors } from 'astad';
+
+const httpApp = new HttpApp({ /* ... */ });
+
+// Use default CORS settings (allows all origins)
+httpApp.use(new HttpCors());
+
+// Or use static middleware method
+httpApp.use(HttpCors.middleware());
+```
+
+### Configuration Options
+
+```ts
+httpApp.use(new HttpCors({
+  origin: '*',                    // Allowed origin(s)
+  credentials: false,             // Allow credentials (cookies, auth headers)
+  maxAge: 86400,                  // Preflight cache duration in seconds
+  privateNetworkAccess: false,    // Allow private network access
+  secureContext: false,           // Enable Cross-Origin isolation headers
+  allowMethods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowHeaders: [
+    'Authorization',
+    'Accept',
+    'Referer',
+    'Content-Transfer-Encoding',
+    'Content-Disposition',
+    'Content-Type',
+  ],
+  exposeHeaders: [],              // Headers exposed to the browser
+}));
+```
+
+### Options Reference
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `origin` | `string` | `'*'` | Allowed origin for CORS requests |
+| `credentials` | `boolean` | `false` | When true, sets `Access-Control-Allow-Credentials: true` |
+| `maxAge` | `number` | `86400` | How long preflight results can be cached (seconds) |
+| `privateNetworkAccess` | `boolean` | `false` | Allow requests from public to private networks |
+| `secureContext` | `boolean` | `false` | Enables `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` for isolation |
+| `allowMethods` | `string[]` | `['GET', 'HEAD', ...]` | HTTP methods allowed in CORS requests |
+| `allowHeaders` | `string[]` | `['Authorization', ...]` | Headers allowed in CORS requests |
+| `exposeHeaders` | `string[]` | `[]` | Headers exposed to the browser via `Access-Control-Expose-Headers` |
+
+### Secure Context
+
+Enable `secureContext` for features requiring cross-origin isolation (e.g., `SharedArrayBuffer`):
+
+```ts
+httpApp.use(new HttpCors({
+  secureContext: true, // Sets COOP and COEP headers
+}));
+```
+
+### Private Network Access
+
+For requests from public websites to private network resources:
+
+```ts
+httpApp.use(new HttpCors({
+  privateNetworkAccess: true,
+}));
+```
+
+## Console Application (CLI)
+
+The CLI module provides a framework for building command-line applications with argument parsing, flags, and middleware support.
+
+### Basic Command
+
 ```ts
 import { Astad, AstadContext, AstadCompose } from 'astad';
 
-class TestCommand {
-  // note: signature is important, as register command will use this property 
-  signature: string = "test";
-
-  description: string = "This is test command!";
+class HelloCommand {
+  signature: string = "hello";
+  description: string = "Say hello!";
 
   compose() {
     const command = new AstadCompose(this.signature);
@@ -109,53 +204,394 @@ class TestCommand {
   }
 
   async handle(ctx: AstadContext) {
-    ctx.info('This is test command!');
+    ctx.info('Hello from Astad!');
   }
 }
 
-const cmd = new Astad();
-cmd.register(new TestCommand);
-await cmd.handle();
+const app = new Astad();
+app.register(new HelloCommand);
+await app.handle();
 
+// Usage: node cli.js hello
 ```
 
-## Container example
+### Arguments
+
+Arguments are positional parameters passed to commands.
+
+```ts
+import { Astad, AstadContext, AstadCompose } from 'astad';
+
+class GreetCommand {
+  signature: string = "greet";
+  description: string = "Greet a user by name";
+
+  compose() {
+    const command = new AstadCompose(this.signature);
+    // Define positional arguments
+    command.arg(
+      { name: 'name', default: 'World' },
+      { name: 'title', default: '' },
+    );
+    return command;
+  }
+
+  async handle(ctx: AstadContext) {
+    const name = ctx.arg('name');   // Get argument value
+    const title = ctx.arg('title');
+
+    if (title) {
+      ctx.info(`Hello, ${title} ${name}!`);
+    } else {
+      ctx.info(`Hello, ${name}!`);
+    }
+  }
+}
+
+const app = new Astad();
+app.register(new GreetCommand);
+await app.handle();
+
+// Usage: node cli.js greet John
+// Usage: node cli.js greet John Mr
+```
+
+### Flags
+
+Flags are named options that can be passed in any order.
+
+```ts
+import { Astad, AstadContext, AstadCompose } from 'astad';
+
+class BuildCommand {
+  signature: string = "build";
+  description: string = "Build the project";
+
+  compose() {
+    const command = new AstadCompose(this.signature);
+    // Define flags with name, alias, and default value
+    command.flag(
+      { name: 'output', alias: 'o', default: './dist' },
+      { name: 'minify', alias: 'm', default: false },
+      { name: 'watch', alias: 'w', default: false },
+      { name: 'target', alias: 't', default: 'es2020', multiple: true },
+    );
+    return command;
+  }
+
+  async handle(ctx: AstadContext) {
+    const output = ctx.flag('output');
+    const minify = ctx.flag('minify');
+    const watch = ctx.flag('watch');
+    const targets = ctx.flag('target'); // Array when multiple: true
+
+    ctx.info(`Building to: ${output}`);
+    ctx.info(`Minify: ${minify}`);
+    ctx.info(`Watch mode: ${watch}`);
+    ctx.json({ targets });
+  }
+}
+
+const app = new Astad();
+app.register(new BuildCommand);
+await app.handle();
+
+// Usage: node cli.js build -o=./out -m -w
+// Usage: node cli.js build --output=./out --minify --watch
+// Usage: node cli.js build -t=es2020 -t=es2021  (multiple values)
+```
+
+### Combined Args and Flags
+
+```ts
+import { Astad, AstadContext, AstadCompose } from 'astad';
+
+class DeployCommand {
+  signature: string = "deploy";
+  description: string = "Deploy to environment";
+
+  compose() {
+    const command = new AstadCompose(this.signature);
+    // Positional argument
+    command.arg({ name: 'environment', default: 'staging' });
+    // Flags
+    command.flag(
+      { name: 'force', alias: 'f', default: false },
+      { name: 'dry-run', alias: 'd', default: false },
+    );
+    return command;
+  }
+
+  async handle(ctx: AstadContext) {
+    const env = ctx.arg('environment');
+    const force = ctx.flag('force');
+    const dryRun = ctx.flag('dry-run');
+
+    if (dryRun) {
+      ctx.info(`[DRY RUN] Would deploy to: ${env}`);
+    } else {
+      ctx.info(`Deploying to: ${env}${force ? ' (forced)' : ''}`);
+    }
+  }
+}
+
+// Usage: node cli.js deploy production -f
+// Usage: node cli.js deploy staging --dry-run
+```
+
+### Context Methods
+
+The `AstadContext` provides utility methods for CLI interaction:
+
+```ts
+async handle(ctx: AstadContext) {
+  // Output methods
+  ctx.log('Normal message');           // Standard output
+  ctx.info('Info message');            // Yellow colored
+  ctx.error('Error message');          // Red colored
+  ctx.infof('Formatted: %s', value);   // Printf-style formatting
+  ctx.json({ key: 'value' });          // Pretty-printed JSON
+
+  // User interaction
+  const answer = await ctx.prompt('Enter value: ');
+  const confirmed = await ctx.confirm('Are you sure? (y/n) ');
+
+  // State management
+  ctx.set('myKey', someValue);
+  const value = ctx.value('myKey');
+}
+```
+
+### Middleware
+
+Add middleware for cross-cutting concerns like logging or authentication:
+
+```ts
+const app = new Astad();
+
+// Function middleware
+app.use(async (ctx, next) => {
+  console.log('Before command');
+  await next();
+  console.log('After command');
+});
+
+// Class middleware
+class LoggerMiddleware {
+  async handle(ctx: AstadContext, next: () => Promise<any>) {
+    const start = Date.now();
+    await next();
+    ctx.infof('Command completed in %dms', Date.now() - start);
+  }
+}
+
+app.use(new LoggerMiddleware());
+app.register(new MyCommand);
+await app.handle();
+```
+
+### Fallback Command
+
+Set a default command when no command is specified:
+
+```ts
+const app = new Astad();
+app.register(new HelpCommand);
+app.fallback(new HelpCommand); // Runs when no command matches
+await app.handle();
+```
+
+## Container (Dependency Injection)
+
+The Container provides dependency injection with four scope types for managing service lifecycles.
+
+### Scopes
+
+| Scope | Description |
+|-------|-------------|
+| `Value` | Static value, returned as-is |
+| `Singleton` | Single instance, created once and cached |
+| `Transient` | New instance created on every resolve |
+| `Contextual` | Single instance per async context (request-scoped) |
+
+### Basic Usage
+
 ```ts
 import { Container, ContainerScope } from 'astad/container';
 
-const container = new Container('default');
+const container = new Container('app');
 
-container.register({
-  id: 'static value',
+// Value scope - static values
+container.set({
+  id: 'config.apiUrl',
   scope: ContainerScope.Value,
-  value: 'Any static value',
+  value: 'https://api.example.com',
 });
 
-container.register({
-  id: 'static date',
+// Singleton scope - created once, reused forever
+container.set({
+  id: 'database',
   scope: ContainerScope.Singleton,
-  value: () => new Date(),
+  value: () => new DatabaseConnection(),
 });
 
-container.register({
-  id: 'current date',
+// Transient scope - new instance each time
+container.set({
+  id: 'uuid',
   scope: ContainerScope.Transient,
-  value: () => new Date(),
+  value: () => crypto.randomUUID(),
 });
 
-// only available within context
-container.register({
-  id: 'context date',
+// Resolve services
+const apiUrl = container.resolve<string>('config.apiUrl');
+const db = container.resolve<DatabaseConnection>('database');
+```
+
+### Using Classes
+
+```ts
+class UserService {
+  constructor() {
+    // initialized once for singleton
+  }
+}
+
+container.set({
+  id: UserService,
+  scope: ContainerScope.Singleton,
+  value: UserService, // class is auto-instantiated
+});
+
+const userService = container.resolve<UserService>(UserService);
+```
+
+### Using Symbols as Identifiers
+
+```ts
+const DATABASE = Symbol('database');
+const LOGGER = Symbol('logger');
+
+container.set({
+  id: DATABASE,
+  scope: ContainerScope.Singleton,
+  value: () => new Database(),
+});
+
+const db = container.resolve(DATABASE);
+```
+
+### Factory with Dependencies
+
+```ts
+container.set({
+  id: 'userRepo',
+  scope: ContainerScope.Singleton,
+  factory: () => new UserRepository(),
+  deps: [],
+});
+
+container.set({
+  id: 'orderRepo',
+  scope: ContainerScope.Singleton,
+  factory: () => new OrderRepository(),
+  deps: [],
+});
+
+// Factory receives resolved dependencies as arguments
+container.set({
+  id: 'orderService',
+  scope: ContainerScope.Singleton,
+  factory: (userRepo, orderRepo) => new OrderService(userRepo, orderRepo),
+  deps: ['userRepo', 'orderRepo'],
+});
+
+const orderService = container.resolve('orderService');
+```
+
+### Contextual Scope (Request-Scoped)
+
+Contextual scope provides the same instance within an async context (e.g., HTTP request) but different instances across contexts.
+
+```ts
+container.set({
+  id: 'requestId',
   scope: ContainerScope.Contextual,
-  value: () => new Date(),
+  factory: () => crypto.randomUUID(),
+  deps: [],
 });
 
-console.log(container.resolve('static value')); // will print "Any static value"
-console.log(container.resolve('static date')); // will print same date not matter how many times you resolve
-console.log(container.resolve('static date')); // will print same date not matter how many times you resolve
-console.log(container.resolve('current date')); // always give current data
-console.log(container.resolve('current date')); // always give current data
+// In HTTP middleware or request handler
+container.asyncLocalRun({}, () => {
+  const id1 = container.resolve('requestId'); // e.g., "abc-123"
+  const id2 = container.resolve('requestId'); // same: "abc-123"
+});
 
+container.asyncLocalRun({}, () => {
+  const id3 = container.resolve('requestId'); // different: "xyz-789"
+});
+```
+
+### Container Methods
+
+```ts
+// Check if service exists
+container.has('myService'); // boolean
+
+// Delete a service
+container.delete('myService');
+
+// Replace existing service (put allows replacement, set throws)
+container.put({ id: 'myService', scope: ContainerScope.Value, value: 'new' });
+
+// Get fresh instance (ignores singleton cache)
+const fresh = container.fresh('myService');
+
+// Pre-resolve all singletons (useful at app startup)
+container.preresolve();
+
+// Clone container with selected services
+const childContainer = container.cloneWith('child', 'service1', 'service2');
+```
+
+### Calling Functions with Dependencies
+
+```ts
+// Sync call
+const result = container.call(
+  (db, logger) => db.query('SELECT * FROM users'),
+  ['database', 'logger']
+);
+
+// Async call (resolves async dependencies)
+const result = await container.callAsync(
+  async (db) => await db.query('SELECT * FROM users'),
+  ['database']
+);
+```
+
+### Context Store (within asyncLocalRun)
+
+```ts
+container.asyncLocalRun(new Map(), () => {
+  // Store arbitrary data in context
+  container.contextStoreSet('userId', 123);
+
+  // Retrieve from context
+  const userId = container.contextStoreGet<number>('userId');
+});
+```
+
+### Async Dependencies
+
+```ts
+container.set({
+  id: 'asyncConfig',
+  scope: ContainerScope.Singleton,
+  value: () => fetch('/config').then(r => r.json()),
+});
+
+// Use resolveAsync for async values
+const config = await container.resolveAsync<Config>('asyncConfig');
 ```
 
 ## Testing

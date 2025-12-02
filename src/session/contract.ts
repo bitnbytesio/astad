@@ -5,7 +5,7 @@ export interface ISessionDriver {
   /**
    * get session id
    */
-  id(): Promise<string>
+  id(): string
   /**
    * open/create new session
    * @param id 

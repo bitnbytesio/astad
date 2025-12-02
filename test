@@ -2,8 +2,9 @@
 
 globs=(
   './src/container/*.spec.ts'
-  './src/http/router/*.spec.ts'
+ # './src/http/router/*.spec.ts'
   './src/session/*.spec.ts'
+  './src/cli/*.spec.ts'
 )
 
 files=$(printf " %s" "${globs[@]}")

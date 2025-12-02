@@ -78,6 +78,10 @@ export class HttpRequestHeaders {
     readonly setHeaderCb: (k: string, v: string | string[]) => any,
   ) { }
 
+  has(key: string) {
+    return this.headers[key] && this.headers[key].length;
+  }
+
   /**
    * read header value
    * @param key 
@@ -130,6 +134,33 @@ export class HttpRequestQuery {
     return this.query[key] as string;
   }
 
+  /**
+   * query string key should be present
+   * @param key
+   * @returns 
+   */
+  present(key: string) {
+    return key in this.query;
+  }
+
+  /**
+   * query key should not be empty
+   * @param key 
+   * @returns 
+   */
+  has(key: string) {
+    return !this.empty(key);
+  }
+
+  /**
+   * is query key empty
+   * @param key 
+   * @returns 
+   */
+  empty(key: string) {
+    return !this.query[key] || !this.query[key].length;
+  }
+
   array(key: string) {
     return Array.isArray(this.query[key]) ? this.query[key] : [this.query[key]];
   }
@@ -169,6 +200,11 @@ export class HttpCookies {
 
     }
   }
+
+  has(name: string) {
+    return !this.get(name);
+  }
+
 
   get(name: string) {
     return this.cookies[name]?.value;

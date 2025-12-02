@@ -1,66 +1,52 @@
 import * as path from 'node:path';
 
-export function GuessMime(source: string) {
+export const MIME_EXT_MAP: any = {
+  '.css': 'text/css',
+  '.gif': 'image/gif',
+  '.html': 'text/html',
+
+  '.js': 'text/javascript',
+  '.json': 'application/json',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+
+  '.mp3': 'audio/mpeg',
+  '.mkv': 'video/x-matroska',
+  '.mp4': 'video/mp4',
+
+  '.oga': 'audio/oga',
+  '.ogg': 'audio/oga',
+  '.opus': 'audio/oga',
+  '.ogv': 'video/ogv',
+  '.ogx': 'application/ogg',
+
+  '.ico': 'image/vnd.microsoft.icon',
+  '.png': 'image/png',
+  '.pdf': 'application/pdf',
+
+  '.svg': 'image/svg+xml',
+  '.wav': 'audio/wave',
+
+  // fonts
+  '.otf': 'font/otf',
+  '.ttf': 'font/ttf',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+
+  '.txt': 'text/plain',
+
+  '.weba': 'image/webm',
+  '.webp': 'image/webp',
+  '.webm': 'video/webm',
+
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.zip': 'application/zip',
+
+  default: 'application/octet-stream',
+};
+
+export function GuessMime(source: string, customMap: { [key: string]: string } = {}) {
   const ext = path.extname(source);
-
-  let type = '';
-
-  switch (ext) {
-    case '.css':
-      type = 'text/css';
-      break;
-    case '.js':
-      type = 'text/javascript';
-      break;
-    case '.json':
-      type = 'application/json';
-      break;
-    case '.html':
-      type = 'text/html';
-      break;
-    case '.jpg':
-    case '.jpeg':
-      type = 'image/jpeg';
-      break;
-    case '.png':
-      type = 'image/png';
-      break;
-    case '.gif':
-      type = 'image/gif';
-      break;
-    case '.mp3':
-      type = 'audio/mpeg';
-      break;
-    case '.oga':
-    case '.ogg':
-    case '.opus':
-      type = 'audio/oga';
-      break;
-    case '.wav':
-      type = 'audio/wave';
-      break;
-    case '.mkv':
-      type = 'video/x-matroska';
-      break;
-    case '.mp4':
-      type = 'video/mp4';
-      break;
-    case '.ogv':
-      type = 'video/ogv';
-      break;
-    case '.webm':
-      type = 'video/webm';
-      break;
-    case '.ogx':
-      type = 'application/ogg';
-      break;
-    case '.pdf':
-      type = 'application/pdf';
-      break;
-    default:
-      type = 'application/octet-stream';
-      break;
-  }
-
-  return type;
+  return customMap[ext] || MIME_EXT_MAP[ext] || MIME_EXT_MAP.default;
 }

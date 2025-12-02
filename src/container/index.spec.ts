@@ -287,3 +287,225 @@ t.test('container:resolve(factory)->contextual', async t => {
   t.notSame(pair1[0].id, pair1[1].id);
   t.notSame(pair2[0].id, pair2[1].id);
 });
+
+t.test('container:has() and delete()', async t => {
+  const container = new Container('default');
+  container.set({
+    id: 'test',
+    scope: ContainerScope.Value,
+    value: 'hello',
+  });
+
+  t.ok(container.has('test'));
+  t.notOk(container.has('nonexistent'));
+
+  container.delete('test');
+  t.notOk(container.has('test'));
+});
+
+t.test('container:put() replaces existing', async t => {
+  const container = new Container('default');
+  container.set({
+    id: 'test',
+    scope: ContainerScope.Value,
+    value: 'first',
+  });
+
+  t.equal(container.value('test'), 'first');
+
+  container.put({
+    id: 'test',
+    scope: ContainerScope.Value,
+    value: 'second',
+  });
+
+  t.equal(container.value('test'), 'second');
+});
+
+t.test('container:fresh() always returns new instance', async t => {
+  const container = new Container('default');
+  container.set({
+    id: 'singleton',
+    scope: ContainerScope.Singleton,
+    value: () => Math.random(),
+  });
+
+  const resolved1 = container.resolve('singleton');
+  const resolved2 = container.resolve('singleton');
+  t.equal(resolved1, resolved2);
+
+  const fresh1 = container.fresh('singleton');
+  const fresh2 = container.fresh('singleton');
+  t.notSame(fresh1, resolved1);
+  t.notSame(fresh1, fresh2);
+});
+
+t.test('container:call() invokes function with deps', async t => {
+  const container = new Container('default');
+  container.set({
+    id: 'multiplier',
+    scope: ContainerScope.Value,
+    value: 10,
+  });
+  container.set({
+    id: 'addend',
+    scope: ContainerScope.Value,
+    value: 5,
+  });
+
+  const result = container.call(
+    (m: number, a: number) => m * 2 + a,
+    ['multiplier', 'addend']
+  );
+
+  t.equal(result, 25);
+});
+
+t.test('container:callAsync() invokes async function with deps', async t => {
+  const container = new Container('default');
+  container.set({
+    id: 'asyncValue',
+    scope: ContainerScope.Singleton,
+    value: () => Promise.resolve(42),
+  });
+
+  const result = await container.callAsync(
+    async (val: number) => val * 2,
+    ['asyncValue']
+  );
+
+  t.equal(result, 84);
+});
+
+t.test('container:preresolve() resolves all singletons', async t => {
+  const container = new Container('default');
+  let singletonCalled = false;
+  let transientCalled = false;
+
+  container.set({
+    id: 'singleton',
+    scope: ContainerScope.Singleton,
+    value: () => { singletonCalled = true; return 'singleton'; },
+  });
+
+  container.set({
+    id: 'transient',
+    scope: ContainerScope.Transient,
+    value: () => { transientCalled = true; return 'transient'; },
+  });
+
+  t.notOk(singletonCalled);
+  t.notOk(transientCalled);
+
+  container.preresolve();
+
+  t.ok(singletonCalled);
+  t.notOk(transientCalled);
+});
+
+t.test('container:cloneWith() creates new container with selected services', async t => {
+  const container = new Container('original');
+  container.set({
+    id: 'service1',
+    scope: ContainerScope.Value,
+    value: 'value1',
+  });
+  container.set({
+    id: 'service2',
+    scope: ContainerScope.Value,
+    value: 'value2',
+  });
+  container.set({
+    id: 'service3',
+    scope: ContainerScope.Value,
+    value: 'value3',
+  });
+
+  const cloned = container.cloneWith('cloned', 'service1', 'service3');
+
+  t.equal(cloned.id, 'cloned');
+  t.ok(cloned.has('service1'));
+  t.notOk(cloned.has('service2'));
+  t.ok(cloned.has('service3'));
+  t.equal(cloned.value('service1'), 'value1');
+  t.equal(cloned.value('service3'), 'value3');
+});
+
+t.test('container:cloneWith() throws on nonexistent service', async t => {
+  const container = new Container('original');
+  container.set({
+    id: 'service1',
+    scope: ContainerScope.Value,
+    value: 'value1',
+  });
+
+  t.throws(() => {
+    container.cloneWith('cloned', 'service1', 'nonexistent');
+  });
+});
+
+t.test('container:contextStoreSet() and contextStoreGet()', async t => {
+  const container = new Container('default');
+
+  t.throws(() => {
+    container.contextStoreGet('key');
+  });
+
+  container.asyncLocalRun(new Map(), () => {
+    container.contextStoreSet('myKey', 'myValue');
+    t.equal(container.contextStoreGet('myKey'), 'myValue');
+    t.equal(container.contextStoreGet('nonexistent'), undefined);
+  });
+});
+
+t.test('container:resolve() throws on unregistered identifier', async t => {
+  const container = new Container('default');
+
+  t.throws(() => {
+    container.resolve('nonexistent');
+  });
+});
+
+t.test('container:value() throws on non-value scope', async t => {
+  const container = new Container('default');
+  container.set({
+    id: 'singleton',
+    scope: ContainerScope.Singleton,
+    value: () => 'test',
+  });
+
+  t.throws(() => {
+    container.value('singleton');
+  });
+});
+
+t.test('container:register() throws on duplicate', async t => {
+  const container = new Container('default');
+  container.set({
+    id: 'test',
+    scope: ContainerScope.Value,
+    value: 'first',
+  });
+
+  t.throws(() => {
+    container.set({
+      id: 'test',
+      scope: ContainerScope.Value,
+      value: 'second',
+    });
+  });
+});
+
+t.test('container:symbol identifier', async t => {
+  const container = new Container('default');
+  const MY_SERVICE = Symbol('myService');
+
+  container.set({
+    id: MY_SERVICE,
+    scope: ContainerScope.Value,
+    value: 'symbol value',
+  });
+
+  t.equal(container.resolve(MY_SERVICE), 'symbol value');
+  t.ok(container.has(MY_SERVICE));
+});

@@ -19,6 +19,7 @@ export interface IFileinfo {
 export interface IHttpAssetOpts {
   root: string
   files: Array<string | { path: string, mime: string }>
+  prefix: string
   cache: boolean
   debug: boolean
   allowRange?: boolean
@@ -28,7 +29,11 @@ export class HttpAsset {
   store: Record<string, any> = {};
   maxAgeSeconds = 60; // 200*24*60*60
 
-  constructor(readonly opts: IHttpAssetOpts) { }
+  constructor(readonly opts: IHttpAssetOpts) {
+    if (this.opts.prefix && (!this.opts.prefix.startsWith('/') || this.opts.prefix.endsWith('/'))) {
+      throw new Error('Assets prefix should start with (/) and should not have trailing (/)');
+    }
+  }
 
   async setup() {
     for (const file of this.opts.files) {
@@ -46,14 +51,18 @@ export class HttpAsset {
 
   routes(options?: Partial<IRouterOptions>) {
     const handler = async (ctx: IHttpContext) => {
-      await this.file(ctx, { path: ctx.path });
+      let path = ctx.path;
+      if (this.opts.prefix) {
+        path = path.replace(this.opts.prefix, '');
+      }
+      await this.file(ctx, { path });
     };
     const route = new HttpRouter(options);
     for (const file of this.opts.files) {
       const abspath = typeof file == 'string' ? file : file.path;
       // replace directory sep to support windows
-      const rpath = path.relative(this.opts.root, abspath).replace(/\\/g, '/');
-      route.get(`/${rpath}`, handler);
+      const rpath = (this.opts.prefix ? this.opts.prefix : '') + '/' + path.relative(this.opts.root, abspath).replace(/\\/g, '/');
+      route.get(rpath, handler);
     }
     return route;
   }
@@ -109,6 +118,7 @@ export class HttpAsset {
   async file(ctx: IHttpContext, file: IHttpAssetFile, head?: boolean) {
     head = head || ctx.method.toLowerCase() == 'head';
     const absfile = path.join(this.opts.root, file.path);
+    // console.log(absfile)
     const info = await this.info(absfile);
     if (!info) {
       ctx.abort(404);

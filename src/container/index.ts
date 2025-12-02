@@ -317,6 +317,9 @@ export class Container {
       throw new Error('context not available.');
     }
     const store = this.asyncLocalStorage.getStore();
+    if (!store) {
+      throw new Error('context store not available.');
+    }
     if (!store[Container.contextRegistryKey]) {
       return store[Container.contextRegistryKey] = new Map;
     }
@@ -327,16 +330,21 @@ export class Container {
     this.asyncLocalStorage = asyncLocalStorage;
   }
 
-  contextStore<T = any>() {
-    return (this.asyncLocalStorage as any).getStore() as T;
+  contextStore<T = any>(): T {
+    if (!this.asyncLocalStorage) {
+      throw new Error('context not available.');
+    }
+    return this.asyncLocalStorage.getStore() as T;
   }
 
   contextStoreSet(k: string, v: any) {
-    this.contextStore().set(k, v);
+    const store = this.contextStore<Map<string, any>>();
+    store.set(k, v);
   }
 
-  contextStoreGet<T = any>(k: string) {
-    return this.contextStore().value(k) as T | undefined;
+  contextStoreGet<T = any>(k: string): T | undefined {
+    const store = this.contextStore<Map<string, any>>();
+    return store.get(k) as T | undefined;
   }
 
 

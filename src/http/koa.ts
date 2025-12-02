@@ -175,6 +175,12 @@ export class HttpKoaContext implements IHttpContext {
   }
 
   redirect(url: string, alt?: string) {
+    if ((process as any).env.APP_PREFIX) {
+      if (url[0] != '/') {
+        url = '/' + url;
+      }
+      url = (process as any).env.APP_PREFIX + url;
+    }
     this.ctx.redirect(url, alt)
   }
 

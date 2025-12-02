@@ -109,10 +109,28 @@ export class HttpApp {
         console.error(err);
         err.code = err.statusCode || err.status || err.code || 500;
         const message = err.code < 500 || err.expose ? err.message : this.opts.defaultErrorMessage as string;
+        let status = Number.isNaN(Number(err.code)) ? 500 : Number(err.code);
+        if (status < 100 || status > 599) {
+          status = 500;
+        }
 
         if (this.viewProvider && ctx.accepts('html')) {
-          const resultError = ResultError.try(err);
-          await this.viewProvider.renderError(ctx, resultError);
+          try {
+            const resultError = ResultError.try(err);
+            const renderedError = await this.viewProvider.renderError(ctx, resultError);
+            ctx.reply({
+              status: status,
+              body: renderedError,
+            });
+          } catch (err: any) {
+             console.error(err);
+             
+            const data: any = { message };
+            if (err.code == 422 && err.errors) {
+              data.errors = err.errors;
+            }
+            ctx.json(data, err.code);
+          }
         } else {
           const data: any = { message };
           if (err.code == 422 && err.errors) {

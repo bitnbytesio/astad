@@ -27,15 +27,6 @@ export class CliContext {
   }
 
   /**
-   * get command flag/arg value, return default value if not exists
-   * @param name 
-   * @returns 
-   */
-  read(name: string) {
-    return this.command.read(name);
-  }
-
-  /**
    * get command flag value, return default value if not exists
    * @param name 
    * @returns 
@@ -297,6 +288,9 @@ export class CommandCompose {
         throw new Error(`Duplicate alias ${flag.alias} of ${flag.name}.`);
       }
       this.map[flag.name] = { flag };
+      if (flag.alias) {
+        this.map[flag.alias] = { flag };
+      }
       this.flags.push(flag);
     }
     return this;
@@ -332,27 +326,16 @@ export class CommandCompose {
   }
 
   /**
-   * get command flag/arg value
-   * @param name 
-   * @returns 
+   * get command flag/arg value, return default value if not exists
+   * @param name
+   * @returns
    */
   value(name: string) {
     const item = this.get(name) as any;
-    return item.flag.value || item.arg.value;
-  }
-
-  /**
-   * get command flag/arg value, if not exists return default value
-   * @param name 
-   * @returns 
-   */
-  read(name: string) {
-    const item = this.get(name) as any;
-    const value = item.flag.value || item.arg.value;
-    if (value) {
-      return value;
+    if (item.flag) {
+      return item.flag.value ?? item.flag.default;
     }
-    return item.flag.default || item.arg.default;
+    return item.arg.value ?? item.arg.default;
   }
 }
 
