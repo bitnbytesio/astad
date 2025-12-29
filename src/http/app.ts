@@ -107,12 +107,14 @@ export class HttpApp {
         }
 
         console.error(err);
-        err.code = err.statusCode || err.status || err.code || 500;
-        const message = err.code < 500 || err.expose ? err.message : this.opts.defaultErrorMessage as string;
-        let status = Number.isNaN(Number(err.code)) ? 500 : Number(err.code);
-        if (status < 100 || status > 599) {
+        // Normalize error code to a valid HTTP status number
+        const rawCode = err.statusCode || err.status || err.code || 500;
+        let status = typeof rawCode === 'number' ? rawCode : parseInt(rawCode, 10);
+        if (Number.isNaN(status) || status < 100 || status > 599) {
           status = 500;
         }
+        err.code = status;
+        const message = status < 500 || err.expose ? err.message : this.opts.defaultErrorMessage as string;
 
         if (this.viewProvider && ctx.accepts('html')) {
           try {
@@ -122,9 +124,9 @@ export class HttpApp {
               status: status,
               body: renderedError,
             });
-          } catch (err: any) {
-             console.error(err);
-             
+          } catch (renderErr: any) {
+            console.error(renderErr);
+            // Fallback to JSON using original error info (err.code was set at line 110)
             const data: any = { message };
             if (err.code == 422 && err.errors) {
               data.errors = err.errors;

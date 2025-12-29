@@ -9,6 +9,8 @@ import { IRouterOptions } from '../http/router/contracts.js';
 import { GuessMime } from './mime.js';
 import { pathsafe } from './path.js';
 
+export type GuessMimeFn = (source: string) => string;
+
 export interface IFileinfo {
   size: number
   modified: Date
@@ -23,6 +25,7 @@ export interface IHttpAssetOpts {
   cache: boolean
   debug: boolean
   allowRange?: boolean
+  guessMime?: GuessMimeFn
 }
 
 export class HttpAsset {
@@ -69,8 +72,8 @@ export class HttpAsset {
 
   /**
    * caution: returns ref to object
-   * @param file 
-   * @returns 
+   * @param file
+   * @returns
    */
   async info(file: string): Promise<IFileinfo | null> {
     if (this.store[file]) {
@@ -78,7 +81,8 @@ export class HttpAsset {
     }
     try {
       const info = await stat(file);
-      const mime = GuessMime(file);
+      const guessMime = this.opts.guessMime || GuessMime;
+      const mime = guessMime(file);
       return this.store[file] = {
         size: info.size,
         modified: info.mtime,
@@ -95,11 +99,14 @@ export class HttpAsset {
     if (this.opts.allowRange) {
       const range = ctx.headers.get('range');
       if (range && range.startsWith('bytes=')) {
-        const [positions] = range.replace(/bytes=/, '').split('-');
-        options.start = parseInt(positions[0], 10);
-        if (positions[1]) {
-          const end = parseInt(positions[1], 10);
-          if (end && !Number.isNaN(end)) {
+        const [startStr, endStr] = range.replace(/bytes=/, '').split('-');
+        const start = parseInt(startStr, 10);
+        if (!Number.isNaN(start)) {
+          options.start = start;
+        }
+        if (endStr) {
+          const end = parseInt(endStr, 10);
+          if (!Number.isNaN(end)) {
             options.end = end;
           }
         }
@@ -109,16 +116,23 @@ export class HttpAsset {
   }
 
   /**
-   * @unsafe does not normalize paths
-   * @param ctx 
-   * @param file 
-   * @param head 
-   * @returns 
+   * Serve a file from the asset root directory
+   * @param ctx
+   * @param file
+   * @param head
+   * @returns
    */
   async file(ctx: IHttpContext, file: IHttpAssetFile, head?: boolean) {
     head = head || ctx.method.toLowerCase() == 'head';
-    const absfile = path.join(this.opts.root, file.path);
-    // console.log(absfile)
+    let filePath = file.path;
+    if (filePath.startsWith('/')) {
+      filePath = filePath.slice(1);
+    }
+    const absfile = pathsafe(filePath, this.opts.root);
+    if (!absfile) {
+      ctx.abort(404);
+      return;
+    }
     const info = await this.info(absfile);
     if (!info) {
       ctx.abort(404);
@@ -187,17 +201,46 @@ export interface IHttpAssetMiddlewareOpts {
   debug: boolean
   cache: boolean
   maxAgeSeconds: number
+  guessMime?: GuessMimeFn
+  maxCacheEntries?: number
 }
+
+const DEFAULT_MAX_CACHE_ENTRIES = 1000;
 
 export class HttpAssetMiddleware {
   store: Record<string, any> = {};
+  private cacheKeys: string[] = [];
   maxAgeSeconds = 60; // 200*24*60*60
 
-  constructor(readonly opts: IHttpAssetMiddlewareOpts) { }
+  constructor(readonly opts: IHttpAssetMiddlewareOpts) {
+    if (!this.opts.maxCacheEntries) {
+      this.opts.maxCacheEntries = DEFAULT_MAX_CACHE_ENTRIES;
+    }
+  }
+
+  private addToCache(key: string, value: any) {
+    // If key already exists, just update value
+    if (this.store[key]) {
+      this.store[key] = value;
+      return;
+    }
+
+    // Evict oldest entries if at capacity
+    while (this.cacheKeys.length >= (this.opts.maxCacheEntries || DEFAULT_MAX_CACHE_ENTRIES)) {
+      const oldestKey = this.cacheKeys.shift();
+      if (oldestKey) {
+        delete this.store[oldestKey];
+      }
+    }
+
+    // Add new entry
+    this.store[key] = value;
+    this.cacheKeys.push(key);
+  }
 
   static middleware(opts: IHttpAssetMiddlewareOpts) {
-    const cors = new HttpAssetMiddleware(opts);
-    return cors.handle.bind(this);
+    const instance = new HttpAssetMiddleware(opts);
+    return instance.handle.bind(instance);
   }
 
   get prefix() {
@@ -235,42 +278,46 @@ export class HttpAssetMiddleware {
 
   /**
   * caution: returns ref to object
-  * @param file 
-  * @returns 
+  * @param file
+  * @returns
   */
   async info(file: string): Promise<IFileinfo | null> {
     if (this.store[file]) {
       return this.store[file];
     }
     try {
-      const info = await stat(file);
-      const mime = GuessMime(file);
-      return this.store[file] = {
-        size: info.size,
-        modified: info.mtime,
+      const fileInfo = await stat(file);
+      const guessMime = this.opts.guessMime || GuessMime;
+      const mime = guessMime(file);
+      const entry = {
+        size: fileInfo.size,
+        modified: fileInfo.mtime,
         checksome: await checksum(file),
         mime,
       };
-    } catch (_: any) {
+      this.addToCache(file, entry);
+      return entry;
+    } catch {
       return null;
     }
   }
 
   streamOptions(ctx: IHttpContext) {
     const options: any = {};
-    //if (this.opts.allowRange) {
     const range = ctx.headers.get('range');
     if (range && range.startsWith('bytes=')) {
-      const [positions] = range.replace(/bytes=/, '').split('-');
-      options.start = parseInt(positions[0], 10);
-      if (positions[1]) {
-        const end = parseInt(positions[1], 10);
-        if (end && !Number.isNaN(end)) {
+      const [startStr, endStr] = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(startStr, 10);
+      if (!Number.isNaN(start)) {
+        options.start = start;
+      }
+      if (endStr) {
+        const end = parseInt(endStr, 10);
+        if (!Number.isNaN(end)) {
           options.end = end;
         }
       }
     }
-    //}
     return options;
   }
 
@@ -308,19 +355,18 @@ export class HttpAssetMiddleware {
       ctx.headers.set('Cache-Control', `public, max-age=${this.maxAgeSeconds}`);
     }
     if (!head) {
-      //console.log('streaming found')
       const options = this.streamOptions(ctx);
       try {
-        // TODO: prune from info incase file is not available
         const body = createReadStream(absfile, options);
         ctx.reply({
           status: options.start ? 206 : 200,
           body,
           headers: { 'content-type': file.mime || info.mime },
         });
-      } catch (err) {
-        console.error(err);
+      } catch {
+        // File became unavailable, remove from cache and return 404
         delete this.store[absfile];
+        ctx.abort(404);
       }
       return;
     }

@@ -39,6 +39,16 @@ export class HttpCors {
 
   constructor(opts: Partial<HttpCorsOpts> = {}) {
     this.opts = { ...defaultOptions, ...opts };
+
+    // Validate: origin '*' with credentials true violates CORS spec
+    // Browsers will reject the response if Access-Control-Allow-Origin is '*'
+    // and Access-Control-Allow-Credentials is 'true'
+    if (this.opts.origin === '*' && this.opts.credentials === true) {
+      throw new Error(
+        'CORS misconfiguration: Cannot use origin "*" with credentials:true. ' +
+        'When credentials are included, the server must specify an explicit origin.'
+      );
+    }
   }
 
   static middleware(opts: Partial<HttpCorsOpts> = {}) {

@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
 
 globs=(
-  './src/container/*.spec.ts'
- # './src/http/router/*.spec.ts'
-  './src/session/*.spec.ts'
   './src/cli/*.spec.ts'
+  './src/conf/*.spec.ts'
+  './src/container/*.spec.ts'
+  './src/event/*.spec.ts'
+  './src/http/router/*.spec.ts'
+  './src/http/*.spec.ts'
+  './src/session/*.spec.ts'
+  './src/support/*.spec.ts'
+  './src/testing/*.spec.ts'
+  './src/testing/container/*.spec.ts'
+  './src/testing/cli/*.spec.ts'
+  './src/testing/http/*.spec.ts'
 )
 
 files=$(printf " %s" "${globs[@]}")

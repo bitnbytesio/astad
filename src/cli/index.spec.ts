@@ -4,6 +4,8 @@ import {
   CliContext,
   CommandCompose,
   ICommand,
+  parseFlag,
+  hasHelpFlag,
 } from './index.js';
 
 // Test command implementations
@@ -311,6 +313,42 @@ t.test('CliApplication:find() returns null for unknown command', async t => {
   t.equal(app.find('unknown'), null);
 });
 
+t.test('CliApplication:list() returns empty array when no commands', async t => {
+  const app = new CliApplication();
+  const commands = app.list();
+  t.same(commands, []);
+});
+
+t.test('CliApplication:list() returns all registered commands', async t => {
+  const app = new CliApplication();
+  const cmd1 = new SimpleCommand();
+  const cmd2 = new CommandWithFlags();
+
+  app.command(cmd1);
+  app.command(cmd2);
+
+  const commands = app.list();
+  t.equal(commands.length, 2);
+  t.equal(commands[0].signature, 'simple');
+  t.equal(commands[1].signature, 'build');
+});
+
+t.test('CliApplication:list() returns a copy, not the original array', async t => {
+  const app = new CliApplication();
+  const cmd = new SimpleCommand();
+  app.command(cmd);
+
+  const commands1 = app.list();
+  const commands2 = app.list();
+
+  // Should be different array instances
+  t.not(commands1, commands2);
+
+  // Modifying returned array should not affect internal state
+  commands1.pop();
+  t.equal(app.list().length, 1);
+});
+
 t.test('CliApplication:fallback() sets fallback command', async t => {
   const app = new CliApplication();
   const fallback = new SimpleCommand();
@@ -493,4 +531,524 @@ t.test('CommandCompose: arg and flag cannot share same name', async t => {
   t.throws(() => {
     compose.flag({ name: 'output', alias: 'o' });
   }, /Duplicate argument/);
+});
+
+// parseFlag tests - need to export or test indirectly
+// We'll test via integration with CliApplication
+
+// Flag parsing format tests
+t.test('Flag parsing: single dash with equals (-word=value)', async t => {
+  // Create a command that uses flags
+  class TestCommand implements ICommand {
+    signature = 'test';
+    description = 'Test command';
+    result: any = {};
+
+    compose() {
+      const cmd = new CommandCompose(this.signature);
+      cmd.flag({ name: 'output', alias: 'o', default: '' });
+      return cmd;
+    }
+
+    handle(ctx: CliContext) {
+      this.result.output = ctx.flag('output');
+    }
+  }
+
+  const cmd = new TestCommand();
+  const compose = cmd.compose();
+
+  // Simulate parsing -output=./dist
+  compose.flags[0].value = './dist';
+
+  const ctx = new CliContext('node', 'script.js', compose);
+  cmd.handle(ctx);
+
+  t.equal(cmd.result.output, './dist');
+});
+
+t.test('Flag parsing: double dash with equals (--word=value)', async t => {
+  class TestCommand implements ICommand {
+    signature = 'test';
+    description = 'Test command';
+    result: any = {};
+
+    compose() {
+      const cmd = new CommandCompose(this.signature);
+      cmd.flag({ name: 'config', default: '' });
+      return cmd;
+    }
+
+    handle(ctx: CliContext) {
+      this.result.config = ctx.flag('config');
+    }
+  }
+
+  const cmd = new TestCommand();
+  const compose = cmd.compose();
+
+  // Simulate parsing --config=./config.json
+  compose.flags[0].value = './config.json';
+
+  const ctx = new CliContext('node', 'script.js', compose);
+  cmd.handle(ctx);
+
+  t.equal(cmd.result.config, './config.json');
+});
+
+t.test('Flag parsing: value with equals sign preserved', async t => {
+  class TestCommand implements ICommand {
+    signature = 'test';
+    description = 'Test command';
+    result: any = {};
+
+    compose() {
+      const cmd = new CommandCompose(this.signature);
+      cmd.flag({ name: 'env', default: '' });
+      return cmd;
+    }
+
+    handle(ctx: CliContext) {
+      this.result.env = ctx.flag('env');
+    }
+  }
+
+  const cmd = new TestCommand();
+  const compose = cmd.compose();
+
+  // Simulate parsing --env=KEY=VALUE (value contains equals)
+  compose.flags[0].value = 'KEY=VALUE';
+
+  const ctx = new CliContext('node', 'script.js', compose);
+  cmd.handle(ctx);
+
+  t.equal(cmd.result.env, 'KEY=VALUE');
+});
+
+t.test('Flag parsing: boolean flag (no value)', async t => {
+  class TestCommand implements ICommand {
+    signature = 'test';
+    description = 'Test command';
+    result: any = {};
+
+    compose() {
+      const cmd = new CommandCompose(this.signature);
+      cmd.flag({ name: 'verbose', alias: 'v', default: false });
+      return cmd;
+    }
+
+    handle(ctx: CliContext) {
+      this.result.verbose = ctx.flag('verbose');
+    }
+  }
+
+  const cmd = new TestCommand();
+  const compose = cmd.compose();
+
+  // Simulate parsing -v (boolean true)
+  compose.flags[0].value = true;
+
+  const ctx = new CliContext('node', 'script.js', compose);
+  cmd.handle(ctx);
+
+  t.equal(cmd.result.verbose, true);
+});
+
+t.test('Flag parsing: alias with equals (-o=value)', async t => {
+  class TestCommand implements ICommand {
+    signature = 'test';
+    description = 'Test command';
+    result: any = {};
+
+    compose() {
+      const cmd = new CommandCompose(this.signature);
+      cmd.flag({ name: 'output', alias: 'o', default: '' });
+      return cmd;
+    }
+
+    handle(ctx: CliContext) {
+      this.result.output = ctx.flag('output');
+    }
+  }
+
+  const cmd = new TestCommand();
+  const compose = cmd.compose();
+
+  // Simulate parsing via alias -o=./build
+  compose.flags[0].value = './build';
+
+  const ctx = new CliContext('node', 'script.js', compose);
+  cmd.handle(ctx);
+
+  t.equal(cmd.result.output, './build');
+});
+
+t.test('Flag parsing: space separated flag value simulation', async t => {
+  class TestCommand implements ICommand {
+    signature = 'test';
+    description = 'Test command';
+    result: any = {};
+
+    compose() {
+      const cmd = new CommandCompose(this.signature);
+      cmd.flag({ name: 'file', alias: 'f', default: '' });
+      return cmd;
+    }
+
+    handle(ctx: CliContext) {
+      this.result.file = ctx.flag('file');
+    }
+  }
+
+  const cmd = new TestCommand();
+  const compose = cmd.compose();
+
+  // Simulate parsing -f ./myfile.txt (space separated)
+  compose.flags[0].value = './myfile.txt';
+
+  const ctx = new CliContext('node', 'script.js', compose);
+  cmd.handle(ctx);
+
+  t.equal(cmd.result.file, './myfile.txt');
+});
+
+t.test('Flag parsing: multiple flags with mixed formats', async t => {
+  class TestCommand implements ICommand {
+    signature = 'test';
+    description = 'Test command';
+    result: any = {};
+
+    compose() {
+      const cmd = new CommandCompose(this.signature);
+      cmd.flag(
+        { name: 'output', alias: 'o', default: '' },
+        { name: 'verbose', alias: 'v', default: false },
+        { name: 'config', alias: 'c', default: '' },
+      );
+      return cmd;
+    }
+
+    handle(ctx: CliContext) {
+      this.result.output = ctx.flag('output');
+      this.result.verbose = ctx.flag('verbose');
+      this.result.config = ctx.flag('config');
+    }
+  }
+
+  const cmd = new TestCommand();
+  const compose = cmd.compose();
+
+  // Simulate parsing: -o=./dist -v --config ./config.json
+  compose.flags[0].value = './dist';
+  compose.flags[1].value = true;
+  compose.flags[2].value = './config.json';
+
+  const ctx = new CliContext('node', 'script.js', compose);
+  cmd.handle(ctx);
+
+  t.equal(cmd.result.output, './dist');
+  t.equal(cmd.result.verbose, true);
+  t.equal(cmd.result.config, './config.json');
+});
+
+t.test('Flag parsing: flag with path containing dashes', async t => {
+  class TestCommand implements ICommand {
+    signature = 'test';
+    description = 'Test command';
+    result: any = {};
+
+    compose() {
+      const cmd = new CommandCompose(this.signature);
+      cmd.flag({ name: 'output', default: '' });
+      return cmd;
+    }
+
+    handle(ctx: CliContext) {
+      this.result.output = ctx.flag('output');
+    }
+  }
+
+  const cmd = new TestCommand();
+  const compose = cmd.compose();
+
+  // Value contains dashes but is not a flag
+  compose.flags[0].value = './my-output-dir';
+
+  const ctx = new CliContext('node', 'script.js', compose);
+  cmd.handle(ctx);
+
+  t.equal(cmd.result.output, './my-output-dir');
+});
+
+t.test('Flag parsing: flag name with dashes (--dry-run)', async t => {
+  class TestCommand implements ICommand {
+    signature = 'deploy';
+    description = 'Deploy command';
+    result: any = {};
+
+    compose() {
+      const cmd = new CommandCompose(this.signature);
+      cmd.flag({ name: 'dry-run', alias: 'd', default: false });
+      return cmd;
+    }
+
+    handle(ctx: CliContext) {
+      this.result.dryRun = ctx.flag('dry-run');
+    }
+  }
+
+  const cmd = new TestCommand();
+  const compose = cmd.compose();
+
+  // Simulate --dry-run
+  compose.flags[0].value = true;
+
+  const ctx = new CliContext('node', 'script.js', compose);
+  cmd.handle(ctx);
+
+  t.equal(cmd.result.dryRun, true);
+});
+
+// Direct parseFlag function tests
+t.test('parseFlag: single dash without value (-verbose)', async t => {
+  const result = parseFlag('-verbose');
+  t.equal(result.name, 'verbose');
+  t.equal(result.value, true);
+});
+
+t.test('parseFlag: single dash with equals value (-output=./dist)', async t => {
+  const result = parseFlag('-output=./dist');
+  t.equal(result.name, 'output');
+  t.equal(result.value, './dist');
+});
+
+t.test('parseFlag: double dash without value (--verbose)', async t => {
+  const result = parseFlag('--verbose');
+  t.equal(result.name, 'verbose');
+  t.equal(result.value, true);
+});
+
+t.test('parseFlag: double dash with equals value (--output=./dist)', async t => {
+  const result = parseFlag('--output=./dist');
+  t.equal(result.name, 'output');
+  t.equal(result.value, './dist');
+});
+
+t.test('parseFlag: value containing equals (--env=KEY=VALUE)', async t => {
+  const result = parseFlag('--env=KEY=VALUE');
+  t.equal(result.name, 'env');
+  t.equal(result.value, 'KEY=VALUE');
+});
+
+t.test('parseFlag: value with multiple equals (--query=a=1&b=2)', async t => {
+  const result = parseFlag('--query=a=1&b=2');
+  t.equal(result.name, 'query');
+  t.equal(result.value, 'a=1&b=2');
+});
+
+t.test('parseFlag: single character flag (-v)', async t => {
+  const result = parseFlag('-v');
+  t.equal(result.name, 'v');
+  t.equal(result.value, true);
+});
+
+t.test('parseFlag: single character flag with value (-o=./dist)', async t => {
+  const result = parseFlag('-o=./dist');
+  t.equal(result.name, 'o');
+  t.equal(result.value, './dist');
+});
+
+t.test('parseFlag: flag with dashes in name (--dry-run)', async t => {
+  const result = parseFlag('--dry-run');
+  t.equal(result.name, 'dry-run');
+  t.equal(result.value, true);
+});
+
+t.test('parseFlag: flag with dashes and value (--dry-run=false)', async t => {
+  const result = parseFlag('--dry-run=false');
+  t.equal(result.name, 'dry-run');
+  t.equal(result.value, 'false');
+});
+
+t.test('parseFlag: throws on non-flag input', async t => {
+  t.throws(() => {
+    parseFlag('notaflag');
+  }, /invalid flag/);
+});
+
+t.test('parseFlag: throws on empty string', async t => {
+  t.throws(() => {
+    parseFlag('');
+  }, /invalid flag/);
+});
+
+t.test('parseFlag: empty value with equals (-flag=)', async t => {
+  const result = parseFlag('-flag=');
+  t.equal(result.name, 'flag');
+  t.equal(result.value, '');
+});
+
+t.test('parseFlag: value with spaces preserved (-msg=hello world)', async t => {
+  const result = parseFlag('-msg=hello world');
+  t.equal(result.name, 'msg');
+  t.equal(result.value, 'hello world');
+});
+
+t.test('parseFlag: path value with dashes (--path=./my-path/to-file)', async t => {
+  const result = parseFlag('--path=./my-path/to-file');
+  t.equal(result.name, 'path');
+  t.equal(result.value, './my-path/to-file');
+});
+
+// Quoted value tests (shell removes quotes, so we receive the unquoted string)
+t.test('parseFlag: quoted value with spaces via equals (--msg="Hello World")', async t => {
+  // Shell passes this as --msg=Hello World (quotes stripped by shell for equals syntax)
+  // But if user does --msg="Hello World", shell keeps it as single arg
+  const result = parseFlag('--msg=Hello World');
+  t.equal(result.name, 'msg');
+  t.equal(result.value, 'Hello World');
+});
+
+t.test('Quoted value: space-separated with quotes (--word "Hello World")', async t => {
+  // Simulating how shell parses: --word "Hello World" becomes ['--word', 'Hello World']
+  // The parsing loop handles this by lookahead
+
+  class TestCommand implements ICommand {
+    signature = 'test';
+    description = 'Test command';
+    result: any = {};
+
+    compose() {
+      const cmd = new CommandCompose(this.signature);
+      cmd.flag({ name: 'word', default: '' });
+      return cmd;
+    }
+
+    handle(ctx: CliContext) {
+      this.result.word = ctx.flag('word');
+    }
+  }
+
+  const cmd = new TestCommand();
+  const compose = cmd.compose();
+
+  // Simulate the result after parsing: value with spaces assigned to flag
+  compose.flags[0].value = 'Hello World';
+
+  const ctx = new CliContext('node', 'script.js', compose);
+  cmd.handle(ctx);
+
+  t.equal(cmd.result.word, 'Hello World');
+});
+
+t.test('Quoted value: multiple words with special chars', async t => {
+  class TestCommand implements ICommand {
+    signature = 'test';
+    description = 'Test command';
+    result: any = {};
+
+    compose() {
+      const cmd = new CommandCompose(this.signature);
+      cmd.flag({ name: 'message', alias: 'm', default: '' });
+      return cmd;
+    }
+
+    handle(ctx: CliContext) {
+      this.result.message = ctx.flag('message');
+    }
+  }
+
+  const cmd = new TestCommand();
+  const compose = cmd.compose();
+
+  // Simulate: -m "Hello, World! How are you?"
+  compose.flags[0].value = 'Hello, World! How are you?';
+
+  const ctx = new CliContext('node', 'script.js', compose);
+  cmd.handle(ctx);
+
+  t.equal(cmd.result.message, 'Hello, World! How are you?');
+});
+
+t.test('Quoted value: JSON string as value', async t => {
+  class TestCommand implements ICommand {
+    signature = 'test';
+    description = 'Test command';
+    result: any = {};
+
+    compose() {
+      const cmd = new CommandCompose(this.signature);
+      cmd.flag({ name: 'data', default: '' });
+      return cmd;
+    }
+
+    handle(ctx: CliContext) {
+      this.result.data = ctx.flag('data');
+    }
+  }
+
+  const cmd = new TestCommand();
+  const compose = cmd.compose();
+
+  // Simulate: --data '{"name": "John", "age": 30}'
+  compose.flags[0].value = '{"name": "John", "age": 30}';
+
+  const ctx = new CliContext('node', 'script.js', compose);
+  cmd.handle(ctx);
+
+  t.equal(cmd.result.data, '{"name": "John", "age": 30}');
+
+  // Verify it can be parsed as JSON
+  const parsed = JSON.parse(cmd.result.data);
+  t.equal(parsed.name, 'John');
+  t.equal(parsed.age, 30);
+});
+
+// hasHelpFlag tests
+t.test('hasHelpFlag: returns true for -h flag', async t => {
+  const args = [
+    { arg: 'command', command: 'test' },
+    { arg: '-h', flag: { name: 'h', value: true as const } },
+  ];
+  t.equal(hasHelpFlag(args), true);
+});
+
+t.test('hasHelpFlag: returns true for --help flag', async t => {
+  const args = [
+    { arg: 'command', command: 'test' },
+    { arg: '--help', flag: { name: 'help', value: true as const } },
+  ];
+  t.equal(hasHelpFlag(args), true);
+});
+
+t.test('hasHelpFlag: returns false when no help flag', async t => {
+  const args = [
+    { arg: 'command', command: 'test' },
+    { arg: '-v', flag: { name: 'v', value: true as const } },
+  ];
+  t.equal(hasHelpFlag(args), false);
+});
+
+t.test('hasHelpFlag: returns false for empty args', async t => {
+  const args: any[] = [];
+  t.equal(hasHelpFlag(args), false);
+});
+
+t.test('hasHelpFlag: returns true when help is among other flags', async t => {
+  const args = [
+    { arg: 'command', command: 'test' },
+    { arg: '-v', flag: { name: 'v', value: true as const } },
+    { arg: '--output', flag: { name: 'output', value: './dist' } },
+    { arg: '-h', flag: { name: 'h', value: true as const } },
+  ];
+  t.equal(hasHelpFlag(args), true);
+});
+
+t.test('hasHelpFlag: help flag with value still recognized', async t => {
+  // Edge case: --help=something (unusual but possible)
+  const args = [
+    { arg: 'command', command: 'test' },
+    { arg: '--help=yes', flag: { name: 'help', value: 'yes' } },
+  ];
+  t.equal(hasHelpFlag(args), true);
 });

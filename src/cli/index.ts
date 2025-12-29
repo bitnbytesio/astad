@@ -110,14 +110,24 @@ interface ICliParsedArg {
   matched?: boolean
 }
 
-function parseFlag(flag: string) {
+export function parseFlag(flag: string): ICliParsedFlag {
   if (!flag.startsWith('-')) {
     throw new Error(`invalid flag "${flag}".`);
   }
-  const [name, value] = flag.slice(1).split('=');
+  // Handle both single dash (-flag) and double dash (--flag)
+  let stripped = flag;
+  if (flag.startsWith('--')) {
+    stripped = flag.slice(2);
+  } else {
+    stripped = flag.slice(1);
+  }
 
-  const parsed: ICliParsedFlag = { name, value };
-  if (typeof value == 'undefined') {
+  const [name, ...valueParts] = stripped.split('=');
+  // Rejoin value parts in case value contains '='
+  const value = valueParts.length > 0 ? valueParts.join('=') : undefined;
+
+  const parsed: ICliParsedFlag = { name, value: value as string };
+  if (typeof value === 'undefined') {
     parsed.value = true;
   }
   return parsed;
@@ -152,6 +162,83 @@ function processCommand(ctx: CliContext, args: ICliParsedArg[]) {
   }
 }
 
+/**
+ * Check if help flag (-h or --help) is present in parsed args
+ */
+export function hasHelpFlag(args: ICliParsedArg[]): boolean {
+  return args.some(arg => arg.flag && (arg.flag.name === 'h' || arg.flag.name === 'help'));
+}
+
+/**
+ * Display help information for a command
+ */
+function showCommandHelp(command: ICommand, composed: CommandCompose): void {
+  console.log('');
+  console.log(`${command.signature} - ${command.description}`);
+  console.log('');
+
+  // Build usage string
+  let usage = `Usage: ${command.signature}`;
+  if (composed.args.length > 0) {
+    for (const arg of composed.args) {
+      usage += arg.default !== undefined ? ` [${arg.name}]` : ` <${arg.name}>`;
+    }
+  }
+  if (composed.flags.length > 0) {
+    usage += ' [options]';
+  }
+  console.log(usage);
+
+  // Show arguments
+  if (composed.args.length > 0) {
+    console.log('');
+    console.log('Arguments:');
+    const maxArgLen = Math.max(...composed.args.map(a => a.name.length));
+    for (const arg of composed.args) {
+      const padding = ' '.repeat(maxArgLen - arg.name.length + 2);
+      const defaultStr = arg.default !== undefined ? ` (default: ${arg.default})` : '';
+      console.log(`  ${arg.name}${padding}${defaultStr}`);
+    }
+  }
+
+  // Show options/flags
+  console.log('');
+  console.log('Options:');
+
+  // Calculate max length for alignment
+  const flagStrs: string[] = [];
+  for (const flag of composed.flags) {
+    let flagStr = '  ';
+    if (flag.alias) {
+      flagStr += `-${flag.alias}, `;
+    } else {
+      flagStr += '    ';
+    }
+    flagStr += `--${flag.name}`;
+    if (flag.multiple) {
+      flagStr += ' (multiple)';
+    }
+    flagStrs.push(flagStr);
+  }
+  // Add help flag
+  flagStrs.push('  -h, --help');
+
+  const maxFlagLen = Math.max(...flagStrs.map(s => s.length));
+
+  for (let i = 0; i < composed.flags.length; i++) {
+    const flag = composed.flags[i];
+    const padding = ' '.repeat(maxFlagLen - flagStrs[i].length + 2);
+    const defaultStr = flag.default !== undefined && flag.default !== false ? ` (default: ${flag.default})` : '';
+    console.log(`${flagStrs[i]}${padding}${defaultStr}`);
+  }
+
+  // Show help flag
+  const helpPadding = ' '.repeat(maxFlagLen - flagStrs[flagStrs.length - 1].length + 2);
+  console.log(`  -h, --help${helpPadding}Show this help message`);
+
+  console.log('');
+}
+
 export class CliApplication {
   protected asyncLocalStorage?: AsyncLocalStorage<any>;
   protected commands: ICommand[] = [];
@@ -183,6 +270,13 @@ export class CliApplication {
     return null;
   }
 
+  /**
+   * Returns a copy of all registered commands
+   */
+  list(): ICommand[] {
+    return [...this.commands];
+  }
+
   use(fn: CliAppMiddleware) {
     if (typeof fn == "object" && typeof fn.handle == 'function') {
       fn = fn.handle.bind(fn);
@@ -201,10 +295,17 @@ export class CliApplication {
     const parsed: ICliParsedArg[] = [];
     let collectapp = true;
     let collectcmd = true;
-    for (const arg of args) {
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
       if (arg.startsWith('-') && collectapp) {
         // collect app flags
-        appflags.push(parseFlag(arg));
+        const flag = parseFlag(arg);
+        // Check if flag value is true (no = sign) and next arg exists and is not a flag
+        if (flag.value === true && i + 1 < args.length && !args[i + 1].startsWith('-')) {
+          flag.value = args[i + 1];
+          i++; // skip next arg as it's been consumed as value
+        }
+        appflags.push(flag);
         continue;
       }
       if (!arg.startsWith('-') && collectapp) {
@@ -218,7 +319,13 @@ export class CliApplication {
       }
 
       if (arg.startsWith('-')) {
-        parsed.push({ arg, flag: parseFlag(arg) });
+        const flag = parseFlag(arg);
+        // Check if flag value is true (no = sign) and next arg exists and is not a flag
+        if (flag.value === true && i + 1 < args.length && !args[i + 1].startsWith('-')) {
+          flag.value = args[i + 1];
+          i++; // skip next arg as it's been consumed as value
+        }
+        parsed.push({ arg, flag });
         continue;
       }
 
@@ -238,6 +345,13 @@ export class CliApplication {
     }
 
     const composed = command.compose();
+
+    // Check for help flag before processing command
+    if (hasHelpFlag(parsed)) {
+      showCommandHelp(command, composed);
+      return;
+    }
+
     const ctx = new CliContext(exec, script, composed);
     processCommand(ctx, parsed);
     ctx.set('command', command);

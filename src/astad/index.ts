@@ -1,6 +1,7 @@
 import { CliApplication, CommandCompose, ICommand, CliContext, CliAppMiddleware } from '../cli/index.js';
 import { InfoCommand } from './info.command.js';
 import { InitCommand } from './init.command.js';
+import { ListCommand } from './list.command.js';
 
 export type AstadLoadable = (astad: Astad) => any;
 
@@ -10,6 +11,7 @@ export class Astad {
     this.app = new CliApplication({ asyncLocalStorage: true });
     this.app.command(new InfoCommand);
     this.app.command(new InitCommand);
+    this.app.command(new ListCommand(this.app));
   }
 
   use(fn: CliAppMiddleware) {

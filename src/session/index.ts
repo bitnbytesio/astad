@@ -36,7 +36,15 @@ export class Session {
   async init(id?: string) {
     this._id = await this.driver.open(id);
     this.opened = true;
-    this.data = JSON.parse(await this.driver.read() || '{ "$": {} }');
+    try {
+      this.data = JSON.parse(await this.driver.read() || '{ "$": {} }');
+    } catch {
+      console.warn(
+        `[Session] Warning: Session data was corrupted for id "${this._id}". ` +
+        `Starting fresh session. Previous session data has been lost.`
+      );
+      this.data = { '$': {} };
+    }
   }
 
   /**

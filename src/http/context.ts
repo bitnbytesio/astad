@@ -174,7 +174,7 @@ export class HttpRequestQuery {
     for (const key in this.query) {
       const vals = this.array(key);
       for (const val of vals) {
-        qs.push(`${key}=${val}`)
+        qs.push(`${encodeURIComponent(key)}=${encodeURIComponent(val)}`)
       }
     }
     return qs.join('&');
@@ -193,16 +193,15 @@ export class HttpCookies {
       let [name, value, ...rest] = citem.split('=');
       name = name?.trim();
       if (name) {
-
+        // Rejoin value parts in case value contained '='
+        const fullValue = rest.length > 0 ? [value, ...rest].join('=') : value;
+        this.cookies[name] = { value: fullValue?.trim(), rest: [] };
       }
-      // const value = rest.join(`=`).trim();
-      this.cookies[name] = { value, rest };
-
     }
   }
 
   has(name: string) {
-    return !this.get(name);
+    return !!this.get(name);
   }
 
 

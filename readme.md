@@ -301,6 +301,35 @@ await app.handle();
 // Usage: node cli.js build -t=es2020 -t=es2021  (multiple values)
 ```
 
+### Flag Formats
+
+Flags support multiple formats for flexibility:
+
+| Format | Example | Description |
+|--------|---------|-------------|
+| Single dash + equals | `-o=./dist` | Short flag with value |
+| Single dash + space | `-o ./dist` | Short flag, value as next arg |
+| Double dash + equals | `--output=./dist` | Long flag with value |
+| Double dash + space | `--output ./dist` | Long flag, value as next arg |
+| Boolean flag | `-v` or `--verbose` | Flag without value (sets to `true`) |
+| Quoted values | `--msg "Hello World"` | Values with spaces |
+| Value with equals | `--env=KEY=VALUE` | Equals signs in value are preserved |
+
+```bash
+# All equivalent:
+node cli.js build -o=./dist
+node cli.js build -o ./dist
+node cli.js build --output=./dist
+node cli.js build --output ./dist
+
+# Quoted values with spaces:
+node cli.js greet --message "Hello, World!"
+node cli.js greet --message="Hello, World!"
+
+# JSON as flag value:
+node cli.js config --data '{"key": "value"}'
+```
+
 ### Combined Args and Flags
 
 ```ts
@@ -399,6 +428,69 @@ const app = new Astad();
 app.register(new HelpCommand);
 app.fallback(new HelpCommand); // Runs when no command matches
 await app.handle();
+```
+
+### Built-in Help Flag
+
+Every command automatically supports `-h` or `--help` flag to display usage information:
+
+```bash
+node cli.js deploy -h
+node cli.js deploy --help
+```
+
+Output:
+```
+deploy - Deploy to environment
+
+Usage: deploy [environment] [options]
+
+Arguments:
+  environment  (default: staging)
+
+Options:
+  -f, --force
+  -d, --dry-run
+  -h, --help     Show this help message
+```
+
+The help output includes:
+- Command signature and description
+- Usage syntax with arguments (required `<arg>` vs optional `[arg]`)
+- All defined flags with aliases, defaults, and multiple indicator
+- Built-in `-h, --help` option
+
+### List Command
+
+The built-in `list` command displays all registered commands:
+
+```bash
+node cli.js list
+```
+
+Output:
+```
+Available commands:
+
+  info    print information!
+  init    This command will create boilerplate!
+  list    List all registered commands
+```
+
+### Listing Commands Programmatically
+
+You can also list commands programmatically using the `list()` method:
+
+```ts
+const app = new Astad();
+app.register(new DeployCommand);
+app.register(new BuildCommand);
+
+// Get all registered commands
+const commands = app.app.list();
+for (const cmd of commands) {
+  console.log(`${cmd.signature}: ${cmd.description}`);
+}
 ```
 
 ## Container (Dependency Injection)
@@ -650,6 +742,173 @@ t.test('service', async t => {
 });
 
 ```
+
+## Static Assets
+
+The framework provides two approaches for serving static files: `HttpAsset` for pre-defined file lists and `HttpAssetMiddleware` for dynamic file serving.
+
+### HttpAsset (Pre-defined Files)
+
+Use `HttpAsset` when you have a known list of static files (e.g., build output). Files are validated at setup time.
+
+```ts
+import { HttpAsset } from 'astad/support';
+import { glob } from 'glob';
+
+// Get list of files to serve
+const files = await glob('./dist/**/*.{js,css,png,svg}');
+
+const assets = new HttpAsset({
+  root: './dist',
+  files: files,
+  // Or with custom MIME types:
+  // files: [
+  //   './dist/app.js',
+  //   { path: './dist/data.bin', mime: 'application/octet-stream' }
+  // ],
+  prefix: '/assets',
+  cache: true,
+  debug: false,
+  allowRange: true, // Enable range requests for video/audio streaming
+});
+
+// Validate all files exist
+await assets.setup();
+
+// Register routes
+httpApp.router(assets.routes());
+```
+
+#### HttpAsset Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `root` | `string` | Base directory for files |
+| `files` | `Array<string \| {path, mime}>` | Files to serve |
+| `prefix` | `string` | URL prefix (must start with `/`, no trailing `/`) |
+| `cache` | `boolean` | Enable ETag and Cache-Control headers |
+| `debug` | `boolean` | Disable caching headers in debug mode |
+| `allowRange` | `boolean` | Enable HTTP Range requests |
+| `guessMime` | `function` | Custom MIME type resolver |
+
+#### Helper Methods
+
+```ts
+// Serve with explicit MIME types
+await assets.css(ctx, 'styles/main.css');
+await assets.js(ctx, 'scripts/app.js');
+await assets.image(ctx, 'logo.png', 'png');
+
+// Check if asset exists
+if (await assets.hasAsset('file.js')) {
+  // ...
+}
+```
+
+### HttpAssetMiddleware (Dynamic Serving)
+
+Use `HttpAssetMiddleware` for serving files dynamically from a directory. Includes path traversal protection.
+
+```ts
+import { HttpAssetMiddleware } from 'astad/support';
+
+// As middleware
+httpApp.use(new HttpAssetMiddleware({
+  root: './public',
+  prefix: '/static/',
+  index: 'index.html', // Serve when path is '/'
+  cache: true,
+  debug: false,
+  maxAgeSeconds: 86400,
+}));
+
+// Or use static method
+httpApp.use(HttpAssetMiddleware.middleware({
+  root: './public',
+  prefix: '/',
+  cache: true,
+  debug: false,
+  maxAgeSeconds: 3600,
+}));
+```
+
+#### HttpAssetMiddleware Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `root` | `string` | Base directory for files |
+| `prefix` | `string` | URL prefix to match |
+| `index` | `string` | Default file for root path |
+| `cache` | `boolean` | Enable caching headers |
+| `debug` | `boolean` | Disable caching in debug mode |
+| `maxAgeSeconds` | `number` | Cache-Control max-age value |
+| `guessMime` | `function` | Custom MIME type resolver |
+| `maxCacheEntries` | `number` | Max file info entries to cache (default: 1000). Prevents memory exhaustion from many unique file requests. |
+
+### Custom MIME Type Resolver
+
+Both `HttpAsset` and `HttpAssetMiddleware` support custom MIME type resolvers:
+
+```ts
+import { HttpAsset, GuessMime } from 'astad/support';
+
+const assets = new HttpAsset({
+  root: './dist',
+  files: [...],
+  prefix: '/assets',
+  cache: true,
+  debug: false,
+  guessMime: (filePath) => {
+    // Custom logic for specific extensions
+    if (filePath.endsWith('.tsx')) return 'text/typescript';
+    if (filePath.endsWith('.vue')) return 'text/x-vue';
+    // Fall back to default
+    return GuessMime(filePath);
+  },
+});
+```
+
+## MIME Types
+
+The framework includes built-in MIME type detection for static assets. You can extend or override the default MIME type mappings.
+
+### Register Custom MIME Types
+
+```ts
+import { registerMime, registerMimeTypes, setDefaultMime } from 'astad/support';
+
+// Register a single extension
+registerMime('.tsx', 'text/typescript');
+registerMime('jsx', 'text/javascript'); // leading dot is optional
+
+// Register multiple extensions at once
+registerMimeTypes({
+  '.tsx': 'text/typescript',
+  '.jsx': 'text/javascript',
+  '.wasm': 'application/wasm',
+  '.avif': 'image/avif',
+});
+
+// Change the default MIME type for unknown extensions
+// (default is 'application/octet-stream')
+setDefaultMime('text/plain');
+```
+
+### Built-in MIME Types
+
+The following extensions are supported out of the box:
+
+| Category | Extensions |
+|----------|------------|
+| JavaScript | `.js`, `.mjs`, `.json` |
+| Styles | `.css` |
+| HTML | `.html` |
+| Images | `.gif`, `.jpg`, `.jpeg`, `.png`, `.ico`, `.svg`, `.webp` |
+| Audio | `.mp3`, `.wav`, `.oga`, `.ogg`, `.opus`, `.weba` |
+| Video | `.mp4`, `.mkv`, `.ogv`, `.ogx`, `.webm` |
+| Fonts | `.otf`, `.ttf`, `.woff`, `.woff2` |
+| Documents | `.pdf`, `.txt`, `.xls`, `.xlsx` |
+| Archives | `.zip` |
 
 ## TODO
 - http: should consider accept header
